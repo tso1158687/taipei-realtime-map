@@ -28,20 +28,23 @@ import { YouBikeLayerComponent } from './features/youbike';
     ViewModeToggleComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  // map-shell first so the map is constructed before layer components run
-  // their effects.
+  // Critical-path components render first; heavier feature layers + the
+  // search panel defer until the browser is idle, splitting the bundle
+  // into a smaller initial chunk and a lazy "features" chunk.
   template: `
     <app-map-shell />
     <app-metro-layer />
-    <app-metro-train-layer />
-    <app-bus-layer />
-    <app-bus-vehicle-layer />
-    <app-rail-layer />
-    <app-youbike-layer />
     <app-locale-switcher />
     <app-view-mode-toggle />
     <app-layer-panel />
-    <app-search-panel />
+    @defer (on idle) {
+      <app-metro-train-layer />
+      <app-bus-layer />
+      <app-bus-vehicle-layer />
+      <app-rail-layer />
+      <app-youbike-layer />
+      <app-search-panel />
+    }
   `,
   styles: [
     `
