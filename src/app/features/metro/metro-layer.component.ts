@@ -23,6 +23,7 @@ import {
   MetroOperatorId,
   TDX_RATE_LIMIT_DELAY_MS,
 } from '../../core/tdx';
+import { ViewModeService } from '../../core/view-mode';
 import { MetroService } from './metro.service';
 import type { MetroLine, MetroNetwork, MetroStation } from './metro.types';
 
@@ -54,6 +55,7 @@ export class MetroLayerComponent implements OnDestroy {
   private readonly layerState = inject(LayerStateService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly rateLimitDelayMs = inject(TDX_RATE_LIMIT_DELAY_MS);
+  private readonly viewMode = inject(ViewModeService);
 
   private readonly addedSources = new Set<string>();
   private readonly addedLayers = new Set<string>();
@@ -100,6 +102,28 @@ export class MetroLayerComponent implements OnDestroy {
             map.setLayoutProperty(layerId, 'visibility', visStr);
           }
         }
+      }
+    });
+
+    // Underground mode: bump line width + opacity so subway tracks stand
+    // out against the dimmed OSM tile.
+    effect(() => {
+      const isReady = this.mapService.isReady();
+      const mode = this.viewMode.mode();
+      if (!isReady) return;
+      const map = this.mapService.getMap();
+      const isUnder = mode === 'underground';
+      for (const operatorId of Object.keys(METRO_OPERATORS) as MetroOperatorId[]) {
+        const layerId = `metro-lines-layer-${operatorId}`;
+        if (!map.getLayer(layerId)) continue;
+        map.setPaintProperty(
+          layerId,
+          'line-width',
+          isUnder
+            ? ['interpolate', ['linear'], ['zoom'], 10, 2.5, 14, 6, 18, 11]
+            : ['interpolate', ['linear'], ['zoom'], 10, 1.5, 14, 4, 18, 8]
+        );
+        map.setPaintProperty(layerId, 'line-opacity', isUnder ? 1 : 0.85);
       }
     });
   }

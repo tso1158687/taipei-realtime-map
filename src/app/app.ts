@@ -3,6 +3,7 @@ import { LayerPanelComponent } from './components/layer-panel/layer-panel.compon
 import { LocaleSwitcherComponent } from './components/locale-switcher/locale-switcher.component';
 import { MapShellComponent } from './components/map-shell/map-shell.component';
 import { SearchPanelComponent } from './components/search-panel/search-panel.component';
+import { ViewModeToggleComponent } from './components/view-mode-toggle/view-mode-toggle.component';
 import { BusLayerComponent, BusVehicleLayerComponent } from './features/bus';
 import {
   MetroLayerComponent,
@@ -24,6 +25,7 @@ import { YouBikeLayerComponent } from './features/youbike';
     LocaleSwitcherComponent,
     LayerPanelComponent,
     SearchPanelComponent,
+    ViewModeToggleComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   // map-shell first so the map is constructed before layer components run
@@ -37,6 +39,7 @@ import { YouBikeLayerComponent } from './features/youbike';
     <app-rail-layer />
     <app-youbike-layer />
     <app-locale-switcher />
+    <app-view-mode-toggle />
     <app-layer-panel />
     <app-search-panel />
   `,

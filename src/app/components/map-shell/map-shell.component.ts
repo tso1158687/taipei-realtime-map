@@ -4,6 +4,7 @@ import {
   Component,
   ElementRef,
   OnDestroy,
+  effect,
   inject,
   viewChild,
 } from '@angular/core';
@@ -15,6 +16,7 @@ import {
 } from 'maplibre-gl';
 import { MapService } from '../../core/map';
 import { TrackingService } from '../../core/tracking';
+import { ViewModeService } from '../../core/view-mode';
 
 /**
  * Owns the DOM container for MapLibre and drives its lifecycle.
@@ -26,7 +28,14 @@ import { TrackingService } from '../../core/tracking';
 @Component({
   selector: 'app-map-shell',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `<div #container class="map-container" role="application" aria-label="Taipei realtime transit map"></div>`,
+  template: `
+    <div #container class="map-container" role="application" aria-label="Taipei realtime transit map"></div>
+    <div
+      class="dim-overlay"
+      [class.active]="isUnderground()"
+      aria-hidden="true"
+    ></div>
+  `,
   styles: [
     `
       :host {
@@ -38,6 +47,18 @@ import { TrackingService } from '../../core/tracking';
         position: absolute;
         inset: 0;
       }
+      .dim-overlay {
+        position: absolute;
+        inset: 0;
+        background: #000;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.3s ease;
+        z-index: 1;
+      }
+      .dim-overlay.active {
+        opacity: 0.45;
+      }
     `,
   ],
   host: {
@@ -47,7 +68,11 @@ import { TrackingService } from '../../core/tracking';
 export class MapShellComponent implements AfterViewInit, OnDestroy {
   private readonly mapService = inject(MapService);
   private readonly tracking = inject(TrackingService);
+  private readonly viewMode = inject(ViewModeService);
   private readonly container = viewChild.required<ElementRef<HTMLDivElement>>('container');
+
+  protected readonly isUnderground = (): boolean =>
+    this.viewMode.mode() === 'underground';
 
   protected onEscape(): void {
     this.tracking.clear();
