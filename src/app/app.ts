@@ -1,12 +1,20 @@
-import { Component, signal } from '@angular/core';
-import { RouterOutlet } from '@angular/router';
+import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { MapShellComponent } from './components/map-shell/map-shell.component';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet],
-  templateUrl: './app.html',
-  styleUrl: './app.css'
+  imports: [MapShellComponent],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  template: `<app-map-shell />`,
+  styles: [
+    `
+      :host {
+        display: block;
+        position: fixed;
+        inset: 0;
+        overflow: hidden;
+      }
+    `,
+  ],
 })
-export class App {
-  protected readonly title = signal('taipei-realtime-map');
-}
+export class App {}

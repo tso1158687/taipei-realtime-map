@@ -1,23 +1,41 @@
+import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { App } from './app';
+import { MapService } from './core/map';
 
 describe('App', () => {
+  /**
+   * MapService is stubbed because the real implementation constructs a
+   * MapLibre `Map`, which needs WebGL — jsdom (the Vitest default DOM)
+   * doesn't provide WebGL, so calling it would throw.
+   */
+  function createMapServiceStub(): Partial<MapService> {
+    const isReady = signal(false);
+    return {
+      isReady: isReady.asReadonly(),
+      initialize: () => ({}) as never,
+      destroy: () => undefined,
+      isInitialized: () => false,
+      getMap: () => ({}) as never,
+    };
+  }
+
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [App],
+      providers: [{ provide: MapService, useValue: createMapServiceStub() }],
     }).compileComponents();
   });
 
-  it('should create the app', () => {
+  it('creates', () => {
     const fixture = TestBed.createComponent(App);
-    const app = fixture.componentInstance;
-    expect(app).toBeTruthy();
+    expect(fixture.componentInstance).toBeTruthy();
   });
 
-  it('should render title', async () => {
+  it('renders the map shell', () => {
     const fixture = TestBed.createComponent(App);
-    await fixture.whenStable();
-    const compiled = fixture.nativeElement as HTMLElement;
-    expect(compiled.querySelector('h1')?.textContent).toContain('Hello, taipei-realtime-map');
+    fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.querySelector('app-map-shell')).toBeTruthy();
   });
 });

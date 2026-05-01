@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Injectable, signal } from '@angular/core';
 import {
   Map as MapLibreMap,
   MapOptions,
@@ -54,6 +54,16 @@ const OSM_RASTER_STYLE: StyleSpecification = {
 export class MapService {
   private map: MapLibreMap | null = null;
 
+  private readonly _isReady = signal(false);
+
+  /**
+   * Becomes true once MapLibre fires its `load` event — at which point it is
+   * safe to add sources, layers, markers, etc. Layer components subscribe to
+   * this signal via an `effect()` so they don't have to know about the
+   * initialisation order.
+   */
+  readonly isReady = this._isReady.asReadonly();
+
   /**
    * Create the map inside the given container. Must be called exactly once,
    * typically from a host component's `ngAfterViewInit`.
@@ -65,7 +75,7 @@ export class MapService {
     if (this.map) {
       throw new Error('MapService already initialized');
     }
-    this.map = new MapLibreMap({
+    const map = new MapLibreMap({
       container,
       style: OSM_RASTER_STYLE,
       center: [...TAIPEI_CENTER],
@@ -75,7 +85,9 @@ export class MapService {
       attributionControl: { compact: true },
       ...options,
     });
-    return this.map;
+    map.on('load', () => this._isReady.set(true));
+    this.map = map;
+    return map;
   }
 
   /** Returns the map instance. Throws if `initialize` has not been called. */
@@ -96,5 +108,6 @@ export class MapService {
       this.map.remove();
       this.map = null;
     }
+    this._isReady.set(false);
   }
 }
