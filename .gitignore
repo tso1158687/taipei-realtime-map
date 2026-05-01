@@ -42,3 +42,11 @@ __screenshots__/
 # System files
 .DS_Store
 Thumbs.db
+
+# Local env (TDX credentials etc.)
+.env
+.env.local
+.env.*.local
+
+# Vercel
+.vercel/
