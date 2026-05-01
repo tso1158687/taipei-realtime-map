@@ -4,6 +4,7 @@ import { LocaleSwitcherComponent } from './components/locale-switcher/locale-swi
 import { MapShellComponent } from './components/map-shell/map-shell.component';
 import { BusLayerComponent, BusVehicleLayerComponent } from './features/bus';
 import { MetroLayerComponent } from './features/metro';
+import { YouBikeLayerComponent } from './features/youbike';
 
 @Component({
   selector: 'app-root',
@@ -12,6 +13,7 @@ import { MetroLayerComponent } from './features/metro';
     MetroLayerComponent,
     BusLayerComponent,
     BusVehicleLayerComponent,
+    YouBikeLayerComponent,
     LocaleSwitcherComponent,
     LayerPanelComponent,
   ],
@@ -23,6 +25,7 @@ import { MetroLayerComponent } from './features/metro';
     <app-metro-layer />
     <app-bus-layer />
     <app-bus-vehicle-layer />
+    <app-youbike-layer />
     <app-locale-switcher />
     <app-layer-panel />
   `,
