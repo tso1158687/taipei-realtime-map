@@ -119,6 +119,16 @@ vercel --prod       # production 部署
 
 兩個都標記 `Production`、`Preview`、`Development` 都套用即可。
 
+## 4.5 (Optional) MapTiler vector tiles
+
+預設使用 OSM raster；想要 vector tile + 暗色模式 + 3D 建築 → 改用 MapTiler：
+
+1. 註冊 [MapTiler Cloud](https://cloud.maptiler.com/account/keys/) 取免費 key（10 萬 tile loads/月）。
+2. 編輯 `src/environments/environment.ts` 把 `maptilerKey` 填入。
+3. 重啟 dev server。
+
+`maptilerStyle` 預設 `streets-v2`，可改成 `basic-v2`、`dataviz`、`dataviz-dark`、`satellite` 等。
+
 ## 5. 常用指令
 
 ```bash

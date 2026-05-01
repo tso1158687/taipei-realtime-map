@@ -4,6 +4,7 @@ import {
   MapOptions,
   StyleSpecification,
 } from 'maplibre-gl';
+import { environment } from '../../../environments/environment';
 
 /** 台北市政府附近，作為地圖預設中心。 */
 export const TAIPEI_CENTER: readonly [number, number] = [121.5654, 25.033];
@@ -75,9 +76,12 @@ export class MapService {
     if (this.map) {
       throw new Error('MapService already initialized');
     }
+    const style: StyleSpecification | string = environment.maptilerKey
+      ? `https://api.maptiler.com/maps/${environment.maptilerStyle}/style.json?key=${environment.maptilerKey}`
+      : OSM_RASTER_STYLE;
     const map = new MapLibreMap({
       container,
-      style: OSM_RASTER_STYLE,
+      style,
       center: [...TAIPEI_CENTER],
       zoom: DEFAULT_ZOOM,
       minZoom: MIN_ZOOM,
