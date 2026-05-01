@@ -1,3 +1,10 @@
 export { BusService } from './bus.service';
+export { BusRealtimeService } from './bus-realtime.service';
 export { BusLayerComponent } from './bus-layer.component';
-export type { BusRoute, BusStop, BusNetwork } from './bus.types';
+export { BusVehicleLayerComponent } from './bus-vehicle-layer.component';
+export type {
+  BusRoute,
+  BusStop,
+  BusNetwork,
+  BusVehicle,
+} from './bus.types';

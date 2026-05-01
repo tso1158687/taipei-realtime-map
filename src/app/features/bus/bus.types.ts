@@ -42,3 +42,17 @@ export interface BusNetwork {
   readonly routes: readonly BusRoute[];
   readonly stops: readonly BusStop[];
 }
+
+export interface BusVehicle {
+  /** PlateNumb, e.g. 'EAL-1234'. Globally unique per city + day. */
+  readonly id: string;
+  readonly plateNumb: string;
+  readonly city: BusCityId;
+  readonly routeUid: string;
+  readonly routeId: string;
+  readonly direction: number;
+  readonly position: { readonly lat: number; readonly lng: number };
+  /** Compass bearing 0..360 degrees, when reported. */
+  readonly azimuth?: number;
+  readonly speed?: number;
+}

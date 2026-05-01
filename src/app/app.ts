@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { LayerPanelComponent } from './components/layer-panel/layer-panel.component';
 import { LocaleSwitcherComponent } from './components/locale-switcher/locale-switcher.component';
 import { MapShellComponent } from './components/map-shell/map-shell.component';
-import { BusLayerComponent } from './features/bus';
+import { BusLayerComponent, BusVehicleLayerComponent } from './features/bus';
 import { MetroLayerComponent } from './features/metro';
 
 @Component({
@@ -11,6 +11,7 @@ import { MetroLayerComponent } from './features/metro';
     MapShellComponent,
     MetroLayerComponent,
     BusLayerComponent,
+    BusVehicleLayerComponent,
     LocaleSwitcherComponent,
     LayerPanelComponent,
   ],
@@ -21,6 +22,7 @@ import { MetroLayerComponent } from './features/metro';
     <app-map-shell />
     <app-metro-layer />
     <app-bus-layer />
+    <app-bus-vehicle-layer />
     <app-locale-switcher />
     <app-layer-panel />
   `,

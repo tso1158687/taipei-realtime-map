@@ -64,3 +64,25 @@ export interface TdxBusShape {
   readonly Geometry: string; // WKT LINESTRING / MULTILINESTRING
   readonly EncodedPolyline?: string;
 }
+
+/** `/v2/Bus/RealTimeByFrequency/City/{City}` — A1 GPS vehicle positions. */
+export interface TdxBusVehicle {
+  readonly PlateNumb: string;
+  readonly OperatorID?: string;
+  readonly RouteUID: string;
+  readonly RouteID: string;
+  readonly RouteName?: TdxLocalizedName;
+  readonly SubRouteUID?: string;
+  readonly SubRouteID?: string;
+  readonly Direction: number;
+  readonly BusPosition: {
+    readonly PositionLat: number;
+    readonly PositionLon: number;
+  };
+  readonly Speed?: number;
+  readonly Azimuth?: number;
+  readonly DutyStatus?: number;
+  readonly BusStatus?: number;
+  readonly GPSTime?: string;
+  readonly UpdateTime?: string;
+}
