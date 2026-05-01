@@ -11,12 +11,20 @@ describe('App', () => {
    */
   function createMapServiceStub(): Partial<MapService> {
     const isReady = signal(false);
+    // Minimal MapLibre stand-in: only the methods MapShellComponent calls.
+    const fakeMap = {
+      addControl: () => fakeMap,
+      removeControl: () => fakeMap,
+      on: () => fakeMap,
+      off: () => fakeMap,
+      remove: () => undefined,
+    } as unknown as ReturnType<MapService['initialize']>;
     return {
       isReady: isReady.asReadonly(),
-      initialize: () => ({}) as never,
+      initialize: () => fakeMap,
       destroy: () => undefined,
       isInitialized: () => false,
-      getMap: () => ({}) as never,
+      getMap: () => fakeMap,
     };
   }
 

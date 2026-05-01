@@ -298,17 +298,27 @@ export class MetroLayerComponent implements OnDestroy {
     accent.style.paddingLeft = '8px';
     wrapper.appendChild(accent);
 
-    const nameZh = document.createElement('div');
-    nameZh.style.fontWeight = '600';
-    nameZh.style.fontSize = '14px';
-    nameZh.textContent = props['nameZh'] ?? '';
-    accent.appendChild(nameZh);
+    // When the user has switched to English we surface the English name as
+    // the primary line and demote the Chinese name to the subtitle (and
+    // vice versa). The locale snapshot is captured when the popup opens;
+    // toggling the language while a popup is open does not retro-fit.
+    const isEn = this.i18n.locale() === 'en';
+    const primaryText = (isEn ? props['nameEn'] : props['nameZh']) ?? '';
+    const secondaryText = (isEn ? props['nameZh'] : props['nameEn']) ?? '';
 
-    const nameEn = document.createElement('div');
-    nameEn.style.color = '#555';
-    nameEn.style.fontSize = '12px';
-    nameEn.textContent = props['nameEn'] ?? '';
-    accent.appendChild(nameEn);
+    const primary = document.createElement('div');
+    primary.style.fontWeight = '600';
+    primary.style.fontSize = '14px';
+    primary.textContent = primaryText;
+    accent.appendChild(primary);
+
+    if (secondaryText) {
+      const secondary = document.createElement('div');
+      secondary.style.color = '#555';
+      secondary.style.fontSize = '12px';
+      secondary.textContent = secondaryText;
+      accent.appendChild(secondary);
+    }
 
     if (props['lineIds']) {
       const lines = document.createElement('div');
