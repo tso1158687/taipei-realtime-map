@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { LayerPanelComponent } from './components/layer-panel/layer-panel.component';
 import { LocaleSwitcherComponent } from './components/locale-switcher/locale-switcher.component';
 import { MapShellComponent } from './components/map-shell/map-shell.component';
+import { SearchPanelComponent } from './components/search-panel/search-panel.component';
 import { BusLayerComponent, BusVehicleLayerComponent } from './features/bus';
 import {
   MetroLayerComponent,
@@ -22,6 +23,7 @@ import { YouBikeLayerComponent } from './features/youbike';
     YouBikeLayerComponent,
     LocaleSwitcherComponent,
     LayerPanelComponent,
+    SearchPanelComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   // map-shell first so the map is constructed before layer components run
@@ -36,6 +38,7 @@ import { YouBikeLayerComponent } from './features/youbike';
     <app-youbike-layer />
     <app-locale-switcher />
     <app-layer-panel />
+    <app-search-panel />
   `,
   styles: [
     `
