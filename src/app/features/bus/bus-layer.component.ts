@@ -19,37 +19,36 @@ import { I18nService } from '../../core/i18n';
 import { LayerStateService } from '../../core/layer-state';
 import { MapService } from '../../core/map';
 import {
-  METRO_OPERATORS,
-  MetroOperatorId,
+  BUS_CITIES,
+  BusCityId,
   TDX_RATE_LIMIT_DELAY_MS,
 } from '../../core/tdx';
-import { MetroService } from './metro.service';
-import type { MetroLine, MetroNetwork, MetroStation } from './metro.types';
+import { BusService } from './bus.service';
+import type { BusNetwork, BusRoute, BusStop } from './bus.types';
 
-const layerKeyFor = (operatorId: MetroOperatorId): string =>
-  `metro.${operatorId}`;
+const layerKeyFor = (city: BusCityId): string => `bus.${city}`;
 
 /**
- * Renders Metro static data (lines + stations) onto the shared MapLibre map.
+ * Renders Bus static data (routes + stops) for all four covered cities
+ * (Taipei + NewTaipei + Taoyuan + Keelung) onto the shared MapLibre map.
  *
- * Pattern:
- *   1. Watch `MapService.isReady` via `effect()`; do nothing until the map
- *      has fired its `load` event.
- *   2. Fetch each Metro operator's network via `MetroService`.
- *   3. Add a GeoJSON source + line layer per operator (lines below points).
- *   4. Add a circle layer for stations and bind click → popup.
+ * Bus data is dense (~700 routes × ~5000 stops per city) so we lean on
+ * MapLibre layer minzoom thresholds to keep the rendering legible:
+ *   - bus-routes-* layers: minzoom 10
+ *   - bus-stops-*  layers: minzoom 12
  *
- * Cleanup: removes any sources/layers it created on destroy, and closes the
- * active popup. Idempotent against re-renders thanks to `getSource`/`setData`.
+ * Cities are fetched sequentially with TDX_RATE_LIMIT_DELAY_MS spacing to
+ * avoid blowing the free-tier 5 reqs / 10s rate limit. Server-side cache
+ * makes warm reloads instant; only first cold visit pays the wait.
  */
 @Component({
-  selector: 'app-metro-layer',
+  selector: 'app-bus-layer',
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: '',
 })
-export class MetroLayerComponent implements OnDestroy {
+export class BusLayerComponent implements OnDestroy {
   private readonly mapService = inject(MapService);
-  private readonly metro = inject(MetroService);
+  private readonly bus = inject(BusService);
   private readonly i18n = inject(I18nService);
   private readonly layerState = inject(LayerStateService);
   private readonly destroyRef = inject(DestroyRef);
@@ -61,40 +60,33 @@ export class MetroLayerComponent implements OnDestroy {
   private loaded = false;
 
   constructor() {
-    // Register operators up-front so the control panel renders something
-    // immediately, even before fetches complete.
-    for (const operatorId of Object.keys(METRO_OPERATORS) as MetroOperatorId[]) {
-      const meta = METRO_OPERATORS[operatorId];
-      this.layerState.register(layerKeyFor(operatorId), {
-        zh: meta.nameZh,
-        en: meta.nameEn,
+    for (const city of Object.keys(BUS_CITIES) as BusCityId[]) {
+      const meta = BUS_CITIES[city];
+      this.layerState.register(layerKeyFor(city), {
+        zh: `${meta.nameZh}公車`,
+        en: `${meta.nameEn} Bus`,
       });
     }
 
     effect(() => {
       if (this.mapService.isReady() && !this.loaded) {
         this.loaded = true;
-        this.loadAllOperators();
+        this.loadAllCities();
       }
     });
 
-    // Reactive visibility wiring: when any layer's visibility flips in
-    // LayerStateService (or when the map first becomes ready), push the
-    // change to MapLibre via setLayoutProperty. Both signals are read at
-    // the top of the effect body so dependency tracking is unconditional —
-    // an early return without reading them would unsubscribe the effect.
     effect(() => {
       const isReady = this.mapService.isReady();
       const layers = this.layerState.layers();
       if (!isReady) return;
       const map = this.mapService.getMap();
       for (const layer of layers) {
-        if (!layer.key.startsWith('metro.')) continue;
-        const operatorId = layer.key.slice('metro.'.length) as MetroOperatorId;
+        if (!layer.key.startsWith('bus.')) continue;
+        const city = layer.key.slice('bus.'.length) as BusCityId;
         const visStr = layer.visible ? 'visible' : 'none';
         for (const layerId of [
-          `metro-lines-layer-${operatorId}`,
-          `metro-stations-layer-${operatorId}`,
+          `bus-routes-layer-${city}`,
+          `bus-stops-layer-${city}`,
         ]) {
           if (map.getLayer(layerId)) {
             map.setLayoutProperty(layerId, 'visibility', visStr);
@@ -104,37 +96,30 @@ export class MetroLayerComponent implements OnDestroy {
     });
   }
 
-  private loadAllOperators(): void {
-    const operatorIds = Object.keys(METRO_OPERATORS) as MetroOperatorId[];
-    // Mark every operator as 'loading' up-front so the control panel shows
-    // a spinner for queued operators (waiting on rate-limit delay).
-    for (const operatorId of operatorIds) {
-      this.layerState.setStatus(layerKeyFor(operatorId), 'loading');
+  private loadAllCities(): void {
+    const cities = Object.keys(BUS_CITIES) as BusCityId[];
+    for (const city of cities) {
+      this.layerState.setStatus(layerKeyFor(city), 'loading');
     }
 
-    from(operatorIds)
+    from(cities)
       .pipe(
-        concatMap((operatorId, index) => {
-          const delay =
-            index === 0 ? 0 : Math.max(0, this.rateLimitDelayMs);
+        concatMap((city, index) => {
+          const delay = index === 0 ? 0 : Math.max(0, this.rateLimitDelayMs);
           const wait$ = delay > 0 ? timer(delay) : of(0);
           return wait$.pipe(
-            mergeMap(() => this.metro.fetchNetwork(operatorId)),
+            mergeMap(() => this.bus.fetchNetwork(city)),
             tap((net) => {
               this.renderNetwork(net);
-              this.layerState.setStatus(layerKeyFor(operatorId), 'loaded');
+              this.layerState.setStatus(layerKeyFor(city), 'loaded');
             }),
             catchError((err: unknown) => {
-              console.error(
-                `[MetroLayer] failed to load ${operatorId}`,
-                err
-              );
-              const message =
-                err instanceof Error ? err.message : String(err);
+              console.error(`[BusLayer] failed to load ${city}`, err);
+              const msg = err instanceof Error ? err.message : String(err);
               this.layerState.setStatus(
-                layerKeyFor(operatorId),
+                layerKeyFor(city),
                 'error',
-                message
+                msg
               );
               return EMPTY;
             })
@@ -145,22 +130,22 @@ export class MetroLayerComponent implements OnDestroy {
       .subscribe();
   }
 
-  private renderNetwork(network: MetroNetwork): void {
+  private renderNetwork(network: BusNetwork): void {
     if (!this.mapService.isInitialized()) return;
-    this.upsertLines(network.operatorId, network.lines);
-    this.upsertStations(network.operatorId, network.stations);
+    this.upsertRoutes(network.city, network.routes);
+    this.upsertStops(network.city, network.stops);
   }
 
-  // ---- lines -------------------------------------------------------------
+  // ---- routes ------------------------------------------------------------
 
-  private upsertLines(
-    operatorId: MetroOperatorId,
-    lines: readonly MetroLine[]
+  private upsertRoutes(
+    city: BusCityId,
+    routes: readonly BusRoute[]
   ): void {
     const map = this.mapService.getMap();
-    const sourceId = `metro-lines-${operatorId}`;
-    const layerId = `metro-lines-layer-${operatorId}`;
-    const data = this.toLinesFeatureCollection(lines);
+    const sourceId = `bus-routes-${city}`;
+    const layerId = `bus-routes-layer-${city}`;
+    const data = this.toRoutesFeatureCollection(routes);
 
     const existing = map.getSource(sourceId);
     if (existing) {
@@ -172,6 +157,7 @@ export class MetroLayerComponent implements OnDestroy {
       id: layerId,
       type: 'line',
       source: sourceId,
+      minzoom: 10,
       layout: { 'line-cap': 'round', 'line-join': 'round' },
       paint: {
         'line-color': ['get', 'color'],
@@ -179,38 +165,40 @@ export class MetroLayerComponent implements OnDestroy {
           'interpolate',
           ['linear'],
           ['zoom'],
-          10,
-          1.5,
+          11,
+          0.8,
           14,
-          4,
+          1.6,
           18,
-          8,
+          3.2,
         ],
-        'line-opacity': 0.85,
+        'line-opacity': 0.55,
       },
     });
     this.addedSources.add(sourceId);
     this.addedLayers.add(layerId);
   }
 
-  private toLinesFeatureCollection(
-    lines: readonly MetroLine[]
+  private toRoutesFeatureCollection(
+    routes: readonly BusRoute[]
   ): GeoJSON.FeatureCollection {
     const features: GeoJSON.Feature[] = [];
-    for (const line of lines) {
+    for (const route of routes) {
+      if (route.geometry.coordinates.length === 0) continue;
       const properties = {
-        lineId: line.lineId,
-        operatorId: line.operatorId,
-        color: line.color,
-        nameZh: line.name.zh,
-        nameEn: line.name.en,
+        routeUid: route.routeUid,
+        routeId: route.routeId,
+        city: route.city,
+        color: route.color,
+        nameZh: route.name.zh,
+        nameEn: route.name.en,
       };
-      if (line.geometry.type === 'LineString') {
+      if (route.geometry.type === 'LineString') {
         features.push({
           type: 'Feature',
           geometry: {
             type: 'LineString',
-            coordinates: line.geometry.coordinates.map((c) => [c[0], c[1]]),
+            coordinates: route.geometry.coordinates.map((c) => [c[0], c[1]]),
           },
           properties,
         });
@@ -219,7 +207,7 @@ export class MetroLayerComponent implements OnDestroy {
           type: 'Feature',
           geometry: {
             type: 'MultiLineString',
-            coordinates: line.geometry.coordinates.map((arr) =>
+            coordinates: route.geometry.coordinates.map((arr) =>
               arr.map((c) => [c[0], c[1]])
             ),
           },
@@ -230,16 +218,13 @@ export class MetroLayerComponent implements OnDestroy {
     return { type: 'FeatureCollection', features };
   }
 
-  // ---- stations ----------------------------------------------------------
+  // ---- stops -------------------------------------------------------------
 
-  private upsertStations(
-    operatorId: MetroOperatorId,
-    stations: readonly MetroStation[]
-  ): void {
+  private upsertStops(city: BusCityId, stops: readonly BusStop[]): void {
     const map = this.mapService.getMap();
-    const sourceId = `metro-stations-${operatorId}`;
-    const layerId = `metro-stations-layer-${operatorId}`;
-    const data = this.toStationsFeatureCollection(stations);
+    const sourceId = `bus-stops-${city}`;
+    const layerId = `bus-stops-layer-${city}`;
+    const data = this.toStopsFeatureCollection(stops);
 
     const existing = map.getSource(sourceId);
     if (existing) {
@@ -251,28 +236,28 @@ export class MetroLayerComponent implements OnDestroy {
       id: layerId,
       type: 'circle',
       source: sourceId,
+      minzoom: 12,
       paint: {
         'circle-radius': [
           'interpolate',
           ['linear'],
           ['zoom'],
-          10,
-          2.5,
-          14,
-          5,
+          12,
+          1.5,
+          15,
+          3,
           18,
-          9,
+          5,
         ],
         'circle-color': '#ffffff',
-        'circle-stroke-width': 2,
-        'circle-stroke-color': METRO_OPERATORS[operatorId].color,
+        'circle-stroke-width': 1.2,
+        'circle-stroke-color': BUS_CITIES[city].color,
       },
     });
     this.addedSources.add(sourceId);
     this.addedLayers.add(layerId);
 
-    // Click → popup. mouseenter/leave changes cursor for affordance.
-    map.on('click', layerId, (e) => this.handleStationClick(e));
+    map.on('click', layerId, (e) => this.handleStopClick(e));
     map.on('mouseenter', layerId, () => {
       map.getCanvas().style.cursor = 'pointer';
     });
@@ -281,12 +266,12 @@ export class MetroLayerComponent implements OnDestroy {
     });
   }
 
-  private toStationsFeatureCollection(
-    stations: readonly MetroStation[]
+  private toStopsFeatureCollection(
+    stops: readonly BusStop[]
   ): GeoJSON.FeatureCollection {
     return {
       type: 'FeatureCollection',
-      features: stations.map((s) => ({
+      features: stops.map((s) => ({
         type: 'Feature',
         geometry: {
           type: 'Point',
@@ -294,11 +279,13 @@ export class MetroLayerComponent implements OnDestroy {
         },
         properties: {
           id: s.id,
-          stationId: s.stationId,
-          operatorId: s.operatorId,
+          stopUid: s.stopUid,
+          stopId: s.stopId,
+          city: s.city,
           nameZh: s.name.zh,
           nameEn: s.name.en,
-          lineIds: s.lineIds.join(','),
+          routeUidsCount: s.routeUids.length,
+          routeUidsCsv: s.routeUids.slice(0, 6).join(','),
         },
       })),
     };
@@ -306,20 +293,19 @@ export class MetroLayerComponent implements OnDestroy {
 
   // ---- popup -------------------------------------------------------------
 
-  private handleStationClick(
+  private handleStopClick(
     event: MapMouseEvent & { features?: MapGeoJSONFeature[] }
   ): void {
     const feature = event.features?.[0];
     if (!feature || feature.geometry.type !== 'Point') return;
     const coords = feature.geometry.coordinates as [number, number];
     const props = (feature.properties ?? {}) as Record<string, string>;
-    const operatorMeta = METRO_OPERATORS[props['operatorId'] as MetroOperatorId];
+    const cityMeta = BUS_CITIES[props['city'] as BusCityId];
 
-    const dom = this.buildPopupDom(props, operatorMeta?.color ?? '#666');
     this.popup?.remove();
     this.popup = new Popup({ closeButton: true, closeOnClick: true })
       .setLngLat(coords as LngLatLike)
-      .setDOMContent(dom)
+      .setDOMContent(this.buildPopupDom(props, cityMeta?.color ?? '#666'))
       .addTo(this.mapService.getMap());
   }
 
@@ -327,22 +313,16 @@ export class MetroLayerComponent implements OnDestroy {
     props: Record<string, string>,
     accentColor: string
   ): HTMLElement {
-    // setDOMContent rather than setHTML avoids any concerns about XSS in
-    // station names from upstream data.
     const wrapper = document.createElement('div');
-    wrapper.className = 'metro-popup';
+    wrapper.className = 'bus-stop-popup';
     wrapper.style.fontFamily = 'inherit';
-    wrapper.style.minWidth = '180px';
+    wrapper.style.minWidth = '200px';
 
     const accent = document.createElement('div');
     accent.style.borderLeft = `4px solid ${accentColor}`;
     accent.style.paddingLeft = '8px';
     wrapper.appendChild(accent);
 
-    // When the user has switched to English we surface the English name as
-    // the primary line and demote the Chinese name to the subtitle (and
-    // vice versa). The locale snapshot is captured when the popup opens;
-    // toggling the language while a popup is open does not retro-fit.
     const isEn = this.i18n.locale() === 'en';
     const primaryText = (isEn ? props['nameEn'] : props['nameZh']) ?? '';
     const secondaryText = (isEn ? props['nameZh'] : props['nameEn']) ?? '';
@@ -361,12 +341,15 @@ export class MetroLayerComponent implements OnDestroy {
       accent.appendChild(secondary);
     }
 
-    if (props['lineIds']) {
+    const routeCount = Number(props['routeUidsCount'] ?? 0);
+    if (routeCount > 0) {
       const lines = document.createElement('div');
-      lines.style.marginTop = '4px';
+      lines.style.marginTop = '6px';
       lines.style.fontSize = '11px';
       lines.style.color = '#777';
-      lines.textContent = props['lineIds'].split(',').join(' · ');
+      lines.textContent = isEn
+        ? `${routeCount} route${routeCount > 1 ? 's' : ''}`
+        : `${routeCount} 條路線經過`;
       accent.appendChild(lines);
     }
 

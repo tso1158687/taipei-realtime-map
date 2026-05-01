@@ -3,10 +3,8 @@ import { TestBed } from '@angular/core/testing';
 import { of } from 'rxjs';
 import { I18nService } from '../../core/i18n';
 import { MapService } from '../../core/map';
-import {
-  METRO_RATE_LIMIT_DELAY_MS,
-  MetroLayerComponent,
-} from './metro-layer.component';
+import { TDX_RATE_LIMIT_DELAY_MS } from '../../core/tdx';
+import { MetroLayerComponent } from './metro-layer.component';
 import { MetroService } from './metro.service';
 import type { MetroNetwork } from './metro.types';
 
@@ -73,7 +71,7 @@ describe('MetroLayerComponent', () => {
         { provide: I18nService, useValue: { locale: signal('zh-TW').asReadonly() } },
         // Override the rate-limit delay to 0 in tests so concatMap fires both
         // operators in the same microtask batch.
-        { provide: METRO_RATE_LIMIT_DELAY_MS, useValue: 0 },
+        { provide: TDX_RATE_LIMIT_DELAY_MS, useValue: 0 },
       ],
     });
 

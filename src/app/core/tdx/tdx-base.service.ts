@@ -1,6 +1,7 @@
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable } from 'rxjs';
+import { Observable, retry, timer } from 'rxjs';
+import { TDX_RATE_LIMIT_DELAY_MS } from './rate-limit';
 
 /**
  * Acceptable query value types for TDX endpoints. `null`/`undefined` entries
@@ -25,6 +26,7 @@ export type TdxQueryParams = Record<
 export class TdxBaseService {
   private readonly http = inject(HttpClient);
   private readonly basePath = '/api/tdx';
+  private readonly retryDelayMs = inject(TDX_RATE_LIMIT_DELAY_MS);
 
   /**
    * Issue a GET against the TDX proxy.
@@ -32,11 +34,24 @@ export class TdxBaseService {
    * @param path TDX path (no leading slash needed; one is allowed and stripped)
    * @param query Optional query params; null/undefined are dropped.
    *              `$format=JSON` is appended automatically when not present.
+   *
+   * On HTTP 429 (rate limit) the request is retried up to 3 times with the
+   * configured delay between attempts. Other errors propagate immediately.
    */
   get<T>(path: string, query: TdxQueryParams = {}): Observable<T> {
     const cleanPath = path.replace(/^\/+/, '');
     const params = this.toHttpParams(query);
-    return this.http.get<T>(`${this.basePath}/${cleanPath}`, { params });
+    return this.http.get<T>(`${this.basePath}/${cleanPath}`, { params }).pipe(
+      retry({
+        count: 3,
+        delay: (err) => {
+          if (err instanceof HttpErrorResponse && err.status === 429) {
+            return timer(this.retryDelayMs);
+          }
+          throw err;
+        },
+      })
+    );
   }
 
   private toHttpParams(query: TdxQueryParams): HttpParams {
