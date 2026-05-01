@@ -32,7 +32,7 @@ describe('MetroService', () => {
       service.fetchStations('TRTC').subscribe((r) => (result = r));
 
       const stationsReq = httpMock.expectOne(
-        (r) => r.url === '/api/tdx/v3/Rail/Metro/Station/TRTC'
+        (r) => r.url === '/api/tdx/v2/Rail/Metro/Station/TRTC'
       );
       stationsReq.flush({
         Stations: [
@@ -46,7 +46,7 @@ describe('MetroService', () => {
       });
 
       const stationOfLineReq = httpMock.expectOne(
-        (r) => r.url === '/api/tdx/v3/Rail/Metro/StationOfLine/TRTC'
+        (r) => r.url === '/api/tdx/v2/Rail/Metro/StationOfLine/TRTC'
       );
       stationOfLineReq.flush({
         StationOfLines: [
@@ -95,7 +95,7 @@ describe('MetroService', () => {
       service.fetchLines('TRTC').subscribe((r) => (lines = r));
 
       httpMock
-        .expectOne((r) => r.url.endsWith('/v3/Rail/Metro/Line/TRTC'))
+        .expectOne((r) => r.url.endsWith('/v2/Rail/Metro/Line/TRTC'))
         .flush({
           Lines: [
             {
@@ -108,7 +108,7 @@ describe('MetroService', () => {
 
       const shapeReq = httpMock.expectOne(
         (r) =>
-          r.url.endsWith('/v3/Rail/Metro/Shape/TRTC') &&
+          r.url.endsWith('/v2/Rail/Metro/Shape/TRTC') &&
           r.params.get('$format') === 'GEOJSON'
       );
       shapeReq.flush({
@@ -144,14 +144,14 @@ describe('MetroService', () => {
       service.fetchLines('TYMC').subscribe((r) => (lines = r));
 
       httpMock
-        .expectOne((r) => r.url.endsWith('/v3/Rail/Metro/Line/TYMC'))
+        .expectOne((r) => r.url.endsWith('/v2/Rail/Metro/Line/TYMC'))
         .flush({
           Lines: [
             { LineID: 'A', LineName: { Zh_tw: '機場線', En: 'Airport Line' } },
           ],
         });
       httpMock
-        .expectOne((r) => r.url.endsWith('/v3/Rail/Metro/Shape/TYMC'))
+        .expectOne((r) => r.url.endsWith('/v2/Rail/Metro/Shape/TYMC'))
         .flush({ type: 'FeatureCollection', features: [] });
 
       const arr = lines as unknown as Array<{ color: string }>;

@@ -16,7 +16,7 @@ export interface TdxLocalizedName {
   readonly En: string;
 }
 
-/** Envelope wrapping `Stations` for `/v3/Rail/Metro/Station/{OperatorID}`. */
+/** Envelope wrapping `Stations` for `/v2/Rail/Metro/Station/{OperatorID}`. */
 export interface TdxMetroStationResponse {
   readonly UpdateTime?: string;
   readonly AuthorityCode?: string;
@@ -36,7 +36,7 @@ export interface TdxMetroStation {
   readonly LocationCity?: string;
 }
 
-/** Envelope for `/v3/Rail/Metro/StationOfLine/{OperatorID}` — maps lines to stations. */
+/** Envelope for `/v2/Rail/Metro/StationOfLine/{OperatorID}` — maps lines to stations. */
 export interface TdxMetroStationOfLineResponse {
   readonly StationOfLines: readonly TdxMetroStationOfLine[];
 }
@@ -47,7 +47,7 @@ export interface TdxMetroStationOfLine {
   readonly Stations: readonly { readonly StationID: string; readonly Sequence: number }[];
 }
 
-/** Envelope for `/v3/Rail/Metro/Line/{OperatorID}` — line metadata + brand color. */
+/** Envelope for `/v2/Rail/Metro/Line/{OperatorID}` — line metadata + brand color. */
 export interface TdxMetroLineResponse {
   readonly Lines: readonly TdxMetroLine[];
 }
@@ -60,7 +60,7 @@ export interface TdxMetroLine {
 }
 
 /**
- * `/v3/Rail/Metro/Shape/{OperatorID}?$format=GEOJSON` returns a GeoJSON
+ * `/v2/Rail/Metro/Shape/{OperatorID}?$format=GEOJSON` returns a GeoJSON
  * FeatureCollection. We keep it minimal here.
  */
 export interface TdxMetroShapeFeatureCollection {

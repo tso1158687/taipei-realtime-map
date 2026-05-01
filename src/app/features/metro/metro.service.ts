@@ -37,11 +37,11 @@ export class MetroService {
   fetchStations(operatorId: MetroOperatorId): Observable<MetroStation[]> {
     return forkJoin({
       stations: this.tdx.get<TdxMetroStationResponse | TdxMetroStationResponse['Stations']>(
-        `v3/Rail/Metro/Station/${operatorId}`
+        `v2/Rail/Metro/Station/${operatorId}`
       ),
       stationOfLine: this.tdx.get<
         TdxMetroStationOfLineResponse | TdxMetroStationOfLineResponse['StationOfLines']
-      >(`v3/Rail/Metro/StationOfLine/${operatorId}`),
+      >(`v2/Rail/Metro/StationOfLine/${operatorId}`),
     }).pipe(
       map(({ stations, stationOfLine }) => {
         const rawStations = unwrapEnvelope<TdxMetroStation>(stations, 'Stations');
@@ -58,10 +58,10 @@ export class MetroService {
   fetchLines(operatorId: MetroOperatorId): Observable<MetroLine[]> {
     return forkJoin({
       meta: this.tdx.get<TdxMetroLineResponse | TdxMetroLineResponse['Lines']>(
-        `v3/Rail/Metro/Line/${operatorId}`
+        `v2/Rail/Metro/Line/${operatorId}`
       ),
       shapes: this.tdx.get<TdxMetroShapeFeatureCollection>(
-        `v3/Rail/Metro/Shape/${operatorId}`,
+        `v2/Rail/Metro/Shape/${operatorId}`,
         { $format: 'GEOJSON' }
       ),
     }).pipe(

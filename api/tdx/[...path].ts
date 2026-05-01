@@ -13,7 +13,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getAccessToken, TdxTokenError } from './_token';
 
-const TDX_BASE = 'https://tdx.transportdata.tw/api/';
+// TDX requires `/basic/` between `/api/` and the version segment for the
+// free-tier service plan. Without it the upstream returns 404 / 403.
+const TDX_BASE = 'https://tdx.transportdata.tw/api/basic/';
 const RESPONSE_HEADERS_TO_DROP = new Set([
   'content-encoding',
   'content-length',
