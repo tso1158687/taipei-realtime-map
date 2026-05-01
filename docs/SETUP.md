@@ -11,13 +11,37 @@
 
 ## 2. 本機環境設定
 
+> ⚠️ **不要手動建立 `.env.local`**。Vercel CLI 對手寫的檔案有時不會
+> 注入到 function runtime，會造成 `/api/health` 一直回 `hasCredentials:
+> false`。請走下面的官方流程，由 `vercel env pull` 寫出檔案。
+
 ```bash
-# 複製範本，填入剛剛拿到的憑證
-cp .env.local.example .env.local
-# 編輯 .env.local，填入 TDX_CLIENT_ID / TDX_CLIENT_SECRET
+# 一次性：把 Vercel CLI 裝起來、登入、把專案連到雲端
+npm install -g vercel
+vercel login
+vercel link
+```
+
+接著把憑證設到雲端 development 環境，再拉回本機：
+
+```bash
+vercel env add TDX_CLIENT_ID development
+# 互動式：把 Client ID 貼進去 enter
+
+vercel env add TDX_CLIENT_SECRET development
+# 互動式：把 Client Secret 貼進去 enter
+
+# 由 Vercel 寫出 .env.local（這個格式 vercel dev 必讀）
+vercel env pull .env.local --environment=development
 ```
 
 > `.env.local` 已在 `.gitignore` 內，**永遠不要 commit**。
+>
+> 這個流程的好處：(1) 雲端與本機同源；(2) 之後跨機器或新成員上手只
+> 需 `vercel env pull` 一行就能跑起來；(3) `vercel deploy` 預覽 / 上線
+> 自動帶上同一組憑證。
+
+`.env.local.example` 只是格式範本，**不再建議直接 cp**。
 
 ## 3. 本機開發
 
