@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
+  NgZone,
   OnDestroy,
   effect,
   inject,
@@ -18,6 +19,19 @@ import type {
   MetroStation,
   MetroTrainSignal,
 } from './metro.types';
+
+/** Smooth-transition state per train. */
+interface TrainAnim {
+  trainNumber: string;
+  signal: MetroTrainSignal;
+  fromLng: number;
+  fromLat: number;
+  toLng: number;
+  toLat: number;
+  transitionStartMs: number;
+}
+
+const TRANSITION_DURATION_MS = 1500;
 
 /**
  * Phase 4 minimal live-train rendering: place a marker at each train's
@@ -39,14 +53,18 @@ export class MetroTrainLayerComponent implements OnDestroy {
   private readonly layerState = inject(LayerStateService);
   private readonly destroyRef = inject(DestroyRef);
 
+  private readonly zone = inject(NgZone);
   private readonly addedSources = new Set<string>();
   private readonly addedLayers = new Set<string>();
   private readonly stationsByOp = new Map<
     MetroOperatorId,
     Map<string, MetroStation>
   >();
+  /** opId → train animation state */
+  private readonly anims = new Map<MetroOperatorId, Map<string, TrainAnim>>();
   /** opId → unsubscribe */
   private readonly active = new Map<MetroOperatorId, () => void>();
+  private rafHandle: number | null = null;
 
   constructor() {
     effect(() => {
@@ -132,51 +150,132 @@ export class MetroTrainLayerComponent implements OnDestroy {
     signals: readonly MetroTrainSignal[]
   ): void {
     if (!this.mapService.isInitialized()) return;
-    const map = this.mapService.getMap();
-    const source = map.getSource(`metro-trains-${op}`) as GeoJSONSource | undefined;
-    if (!source) return;
     const stations = this.stationsByOp.get(op);
     if (!stations) return;
 
-    // De-duplicate by trainNumber: a train can show up as approaching
-    // multiple stations; keep the row with the smallest estimateTime.
+    // De-duplicate by trainNumber.
     const byTrain = new Map<string, MetroTrainSignal>();
     for (const s of signals) {
       const prev = byTrain.get(s.trainNumber);
-      if (!prev) {
-        byTrain.set(s.trainNumber, s);
-        continue;
-      }
       if (
+        !prev ||
         (s.estimateTimeSeconds ?? 99_999) <
-        (prev.estimateTimeSeconds ?? 99_999)
+          (prev.estimateTimeSeconds ?? 99_999)
       ) {
         byTrain.set(s.trainNumber, s);
       }
     }
 
-    const features: GeoJSON.Feature[] = [];
+    // Update or create train anim entries with new target station.
+    let opAnims = this.anims.get(op);
+    if (!opAnims) {
+      opAnims = new Map();
+      this.anims.set(op, opAnims);
+    }
+    const now = performance.now();
+    const newKeys = new Set<string>();
     for (const sig of byTrain.values()) {
       const station = stations.get(sig.stationId);
       if (!station) continue;
-      features.push({
-        type: 'Feature',
-        geometry: {
-          type: 'Point',
-          coordinates: [station.position.lng, station.position.lat],
-        },
-        properties: {
+      newKeys.add(sig.trainNumber);
+      const prev = opAnims.get(sig.trainNumber);
+      if (
+        prev &&
+        (prev.toLng !== station.position.lng ||
+          prev.toLat !== station.position.lat)
+      ) {
+        // Capture current rendered position as new "from", animate to new station.
+        const t = Math.min(
+          1,
+          (now - prev.transitionStartMs) / TRANSITION_DURATION_MS
+        );
+        const curLng = prev.fromLng + (prev.toLng - prev.fromLng) * t;
+        const curLat = prev.fromLat + (prev.toLat - prev.fromLat) * t;
+        opAnims.set(sig.trainNumber, {
           trainNumber: sig.trainNumber,
-          stationId: sig.stationId,
-          lineId: sig.lineId ?? '',
-          direction: sig.direction ?? 0,
-          destinationZh: sig.destinationName?.zh ?? '',
-          destinationEn: sig.destinationName?.en ?? '',
-          estimateTimeSeconds: sig.estimateTimeSeconds ?? -1,
-        },
-      });
+          signal: sig,
+          fromLng: curLng,
+          fromLat: curLat,
+          toLng: station.position.lng,
+          toLat: station.position.lat,
+          transitionStartMs: now,
+        });
+      } else if (!prev) {
+        // First time seeing this train: start at its station (no transition).
+        opAnims.set(sig.trainNumber, {
+          trainNumber: sig.trainNumber,
+          signal: sig,
+          fromLng: station.position.lng,
+          fromLat: station.position.lat,
+          toLng: station.position.lng,
+          toLat: station.position.lat,
+          transitionStartMs: now - TRANSITION_DURATION_MS,
+        });
+      } else {
+        // Same station — keep prev (no rebase).
+        prev.signal = sig;
+      }
     }
-    source.setData({ type: 'FeatureCollection', features });
+    // Drop trains no longer in feed.
+    for (const key of opAnims.keys()) {
+      if (!newKeys.has(key)) opAnims.delete(key);
+    }
+
+    this.ensureRaf();
+  }
+
+  private ensureRaf(): void {
+    if (this.rafHandle !== null) return;
+    // Run RAF outside Angular zone to avoid CD churn 60 times/sec.
+    this.zone.runOutsideAngular(() => {
+      const tick = () => {
+        this.rafHandle = requestAnimationFrame(tick);
+        this.renderFrame();
+      };
+      this.rafHandle = requestAnimationFrame(tick);
+    });
+  }
+
+  private renderFrame(): void {
+    if (!this.mapService.isInitialized()) return;
+    const map = this.mapService.getMap();
+    const now = performance.now();
+    let anyActive = false;
+    for (const [op, opAnims] of this.anims) {
+      const features: GeoJSON.Feature[] = [];
+      for (const a of opAnims.values()) {
+        const t = Math.min(
+          1,
+          (now - a.transitionStartMs) / TRANSITION_DURATION_MS
+        );
+        if (t < 1) anyActive = true;
+        const lng = a.fromLng + (a.toLng - a.fromLng) * t;
+        const lat = a.fromLat + (a.toLat - a.fromLat) * t;
+        features.push({
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [lng, lat] },
+          properties: {
+            trainNumber: a.trainNumber,
+            stationId: a.signal.stationId,
+            lineId: a.signal.lineId ?? '',
+            direction: a.signal.direction ?? 0,
+            destinationZh: a.signal.destinationName?.zh ?? '',
+            destinationEn: a.signal.destinationName?.en ?? '',
+          },
+        });
+      }
+      const source = map.getSource(`metro-trains-${op}`) as
+        | GeoJSONSource
+        | undefined;
+      source?.setData({ type: 'FeatureCollection', features });
+    }
+    // If all transitions completed and no active opAnims, stop the loop.
+    if (!anyActive) {
+      if (this.rafHandle !== null) {
+        cancelAnimationFrame(this.rafHandle);
+        this.rafHandle = null;
+      }
+    }
   }
 
   private clearSource(op: MetroOperatorId): void {
@@ -190,6 +289,10 @@ export class MetroTrainLayerComponent implements OnDestroy {
   ngOnDestroy(): void {
     for (const stop of this.active.values()) stop();
     this.active.clear();
+    if (this.rafHandle !== null) {
+      cancelAnimationFrame(this.rafHandle);
+      this.rafHandle = null;
+    }
     if (!this.mapService.isInitialized()) return;
     const map = this.mapService.getMap();
     for (const id of this.addedLayers) if (map.getLayer(id)) map.removeLayer(id);

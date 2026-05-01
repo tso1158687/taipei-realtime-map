@@ -55,3 +55,34 @@
 - 理由：與 layer panel 區別 mode（捷運 vs 公車）
 - 替代：「{城市}」（純城市名稱）；可能誤解為「整個城市的所有交通」
 
+## Phase 3 - 鐵路靜態
+
+**D-009 — TRA + THSR 合在 features/rail 同一模組**
+- 選：共用 RailService + RailLayerComponent，以 RailMode='TRA'|'THSR' 區別
+- 理由：API shape 高度相似；THSR 只 12 站，獨立 module 太重
+- 替代：各自一個 feature module；放棄
+
+**D-010 — THSR 沒 Line endpoint 時，從 Shape 合成 line list**
+- 選：fetchLines 偵測 meta=[]，直接以 Shape 為主資料源
+- 理由：避免報錯；視覺上仍能畫線
+- 替代：硬寫死 THSR 5 條線；不夠彈性
+
+## Phase 4 - 捷運即時
+
+**D-011 — Phase 4 列車先 render 在站點座標（非 along-line interpolation）**
+- 選：每 15s LiveBoard poll 後把列車跳到報告站位置；操作員品牌色 + circle-blur
+  讓視覺與靜態 station 區分
+- 理由：完整反推 + 平滑動畫架構複雜度高、context budget 有限
+- 替代：完整 along-line interpolation；轉到 Phase 5/8 做
+
+## Phase 5 - 3D 列車（部分延後）
+
+**D-012 — Phase 5 範疇縮減：只做 smooth station-to-station 2D 動畫，3D 列車模型延後 Phase 8**
+- 選：用 raf + lerp 把 Phase 4 的「跳站」改成「沿線 1s 平滑過渡」；
+  3D Three.js 列車模型作為 Phase 8 future work 處理
+- 理由：(1) 完整 mini-tokyo Three.js port 包含 GPGPU shaders、多 car geometry、
+  WebGL 整合，預估 200+ 行高難度代碼；(2) context budget 有限，要把 Phase 6 + 7
+  也做完；(3) 平滑動畫已經給 80% mini-tokyo 體驗的視覺感受
+- 替代：做完整 3D port；放棄因 context 不足，會中斷其他 phase
+- 接續：Phase 8（或下次 session 接手時）會挑回來實作完整 Three.js layer
+
