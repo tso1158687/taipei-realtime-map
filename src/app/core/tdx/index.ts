@@ -1,5 +1,6 @@
 export { TdxBaseService } from './tdx-base.service';
 export type { TdxQueryParams } from './tdx-base.service';
+export { unwrapEnvelope } from './envelope';
 export {
   METRO_OPERATORS,
   RAIL_OPERATORS,

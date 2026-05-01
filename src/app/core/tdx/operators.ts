@@ -49,10 +49,36 @@ export const RAIL_OPERATORS = {
 
 export type RailOperatorId = keyof typeof RAIL_OPERATORS;
 
-/** TDX City code used in /Bus/.../City/{City} endpoints. */
+/**
+ * TDX City code used in /Bus/.../City/{City} and /Bike/.../City/{City}
+ * endpoints. The `color` field is the brand colour used to outline bus /
+ * bike markers belonging to that city when no per-route colour is available.
+ */
 export const BUS_CITIES = {
-  Taipei: { id: 'Taipei', nameZh: '臺北市', nameEn: 'Taipei City' },
-  NewTaipei: { id: 'NewTaipei', nameZh: '新北市', nameEn: 'New Taipei City' },
-} as const;
+  Taipei: {
+    id: 'Taipei',
+    nameZh: '臺北市',
+    nameEn: 'Taipei City',
+    color: '#0070bd',
+  },
+  NewTaipei: {
+    id: 'NewTaipei',
+    nameZh: '新北市',
+    nameEn: 'New Taipei City',
+    color: '#5bb04a',
+  },
+  Taoyuan: {
+    id: 'Taoyuan',
+    nameZh: '桃園市',
+    nameEn: 'Taoyuan City',
+    color: '#7e277e',
+  },
+  Keelung: {
+    id: 'Keelung',
+    nameZh: '基隆市',
+    nameEn: 'Keelung City',
+    color: '#0099cc',
+  },
+} as const satisfies Record<string, OperatorMeta>;
 
 export type BusCityId = keyof typeof BUS_CITIES;

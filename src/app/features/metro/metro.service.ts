@@ -5,6 +5,7 @@ import {
   METRO_OPERATORS,
   type MetroOperatorId,
   TdxBaseService,
+  unwrapEnvelope as coreUnwrap,
 } from '../../core/tdx';
 import type {
   TdxMetroLine,
@@ -86,26 +87,10 @@ export class MetroService {
 // ---------------------------------------------------------------------------
 
 /**
- * TDX V3 sometimes returns the data array directly (no envelope) and
- * sometimes wraps it in `{ <Key>: [...] }`. Be defensive.
+ * @deprecated Re-export for back-compat with existing tests; prefer
+ * importing `unwrapEnvelope` directly from `../../core/tdx`.
  */
-export function unwrapEnvelope<T>(
-  payload: unknown,
-  key: string
-): readonly T[] {
-  if (Array.isArray(payload)) {
-    return payload as readonly T[];
-  }
-  if (
-    payload &&
-    typeof payload === 'object' &&
-    key in payload &&
-    Array.isArray((payload as Record<string, unknown>)[key])
-  ) {
-    return (payload as Record<string, readonly T[]>)[key];
-  }
-  return [];
-}
+export const unwrapEnvelope = coreUnwrap;
 
 export function buildLineIdsByStation(
   rows: readonly TdxMetroStationOfLine[]

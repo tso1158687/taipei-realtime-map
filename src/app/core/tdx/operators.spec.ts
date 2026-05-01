@@ -20,9 +20,14 @@ describe('TDX operator constants', () => {
     expect(RAIL_OPERATORS.THSR.id).toBe('THSR');
   });
 
-  it('exposes Taipei + NewTaipei bus city codes', () => {
+  it('exposes Taipei + NewTaipei + Taoyuan + Keelung bus city codes', () => {
     expect(BUS_CITIES.Taipei.id).toBe('Taipei');
     expect(BUS_CITIES.NewTaipei.id).toBe('NewTaipei');
+    expect(BUS_CITIES.Taoyuan.id).toBe('Taoyuan');
+    expect(BUS_CITIES.Keelung.id).toBe('Keelung');
+    for (const meta of Object.values(BUS_CITIES)) {
+      expect(meta.color).toMatch(/^#[0-9a-f]{6}$/i);
+    }
   });
 
   it('keys equal ids for every operator', () => {
