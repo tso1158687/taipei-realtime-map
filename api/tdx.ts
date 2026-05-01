@@ -1,20 +1,21 @@
 /**
- * TDX catch-all proxy.
+ * TDX proxy.
  *
- * Forwards GET requests under `/api/tdx/<...>` to the TDX upstream
- * (`https://tdx.transportdata.tw/api/<...>`), attaching a server-side
- * Bearer token. The TDX Client Secret never reaches the browser.
+ * Routed via `vercel.json` rewrite:
+ *   /api/tdx/<anything>  →  /api/tdx?path=<anything>
  *
- * Example:
- *   GET /api/tdx/v3/Rail/Metro/Network/TRTC?$top=10
- *     -> https://tdx.transportdata.tw/api/v3/Rail/Metro/Network/TRTC?$top=10
+ * The rewrite-based route avoids `vercel dev`'s bug with nested catch-all
+ * filenames (`api/<folder>/[...slug].ts` is registered at build time but
+ * not matched at request time). Frontend code keeps calling
+ * `/api/tdx/v2/Rail/Metro/Station/TRTC?...` as if it were a normal path.
+ *
+ * The Client Secret never reaches the browser — token exchange happens
+ * server-side via `_lib/tdx-token`.
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getAccessToken, TdxTokenError } from './_token';
+import { getAccessToken, TdxTokenError } from './_lib/tdx-token';
 
-// TDX requires `/basic/` between `/api/` and the version segment for the
-// free-tier service plan. Without it the upstream returns 404 / 403.
 const TDX_BASE = 'https://tdx.transportdata.tw/api/basic/';
 const RESPONSE_HEADERS_TO_DROP = new Set([
   'content-encoding',
@@ -32,13 +33,18 @@ export default async function handler(
     return;
   }
 
-  const pathSegments = collectPathSegments(req.query['path']);
-  if (pathSegments.length === 0) {
+  const rawPath = readPathQuery(req.query['path']);
+  if (!rawPath) {
     res.status(400).json({ error: 'Missing TDX path' });
     return;
   }
+  const segments = rawPath.split('/').filter((s) => s.length > 0);
+  if (segments.length === 0) {
+    res.status(400).json({ error: 'Empty TDX path' });
+    return;
+  }
 
-  const upstreamUrl = buildUpstreamUrl(pathSegments, req.query);
+  const upstreamUrl = buildUpstreamUrl(segments, req.query);
 
   let token: string;
   try {
@@ -80,14 +86,14 @@ export default async function handler(
   res.send(body);
 }
 
-function collectPathSegments(raw: string | string[] | undefined): string[] {
-  if (Array.isArray(raw)) return raw.filter((s) => s.length > 0);
-  if (typeof raw === 'string' && raw.length > 0) return [raw];
-  return [];
+function readPathQuery(raw: string | string[] | undefined): string {
+  if (Array.isArray(raw)) return raw.join('/');
+  if (typeof raw === 'string') return raw;
+  return '';
 }
 
 function buildUpstreamUrl(
-  pathSegments: readonly string[],
+  segments: readonly string[],
   query: VercelRequest['query']
 ): string {
   const params = new URLSearchParams();
@@ -100,6 +106,6 @@ function buildUpstreamUrl(
     }
   }
   const qs = params.toString();
-  const path = pathSegments.map(encodeURIComponent).join('/');
+  const path = segments.map(encodeURIComponent).join('/');
   return `${TDX_BASE}${path}${qs ? `?${qs}` : ''}`;
 }

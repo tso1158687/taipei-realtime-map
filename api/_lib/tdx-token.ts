@@ -6,6 +6,10 @@
  * 30 seconds before expiry to avoid borderline expiries during a request.
  *
  * Reference: https://tdx.transportdata.tw/
+ *
+ * This file lives under `api/_lib/` because Vercel excludes any file or
+ * directory whose name starts with an underscore from automatic Function
+ * routing — exactly what we want for shared helpers.
  */
 
 const TDX_TOKEN_URL =
