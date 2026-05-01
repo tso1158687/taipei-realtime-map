@@ -9,7 +9,6 @@ import {
   buildLineIdsByStation,
   mapStation,
   mergeLinesAndShapes,
-  parseWktGeometry,
   unwrapEnvelope,
 } from './metro.service';
 
@@ -225,26 +224,8 @@ describe('MetroService', () => {
       }
     });
 
-    it('parseWktGeometry: handles LINESTRING / MULTILINESTRING / invalid', () => {
-      const ls = parseWktGeometry('LINESTRING(1 2, 3 4, 5 6)');
-      expect(ls?.type).toBe('LineString');
-      expect(ls?.coordinates.length).toBe(3);
-
-      const mls = parseWktGeometry('MULTILINESTRING((1 2, 3 4), (5 6, 7 8))');
-      expect(mls?.type).toBe('MultiLineString');
-      if (mls?.type === 'MultiLineString') {
-        expect(mls.coordinates.length).toBe(2);
-      }
-
-      // Single-group MULTILINESTRING is normalised to a plain LineString
-      const single = parseWktGeometry('MULTILINESTRING((1 2, 3 4))');
-      expect(single?.type).toBe('LineString');
-
-      expect(parseWktGeometry('')).toBeNull();
-      expect(parseWktGeometry(undefined)).toBeNull();
-      expect(parseWktGeometry('POINT(1 2)')).toBeNull();
-      expect(parseWktGeometry('garbage')).toBeNull();
-    });
+    // parseWktGeometry tests live in core/geometry/wkt.spec.ts now that
+    // the parser has been extracted as a shared utility.
   });
 
   it('fetchNetwork: forks both station and line requests and combines them', () => {

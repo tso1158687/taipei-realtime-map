@@ -4,6 +4,7 @@
  * deliberate API change for downstream consumers (UI components, tests).
  */
 
+import type { LineGeometry } from '../../core/geometry';
 import type { MetroOperatorId } from '../../core/tdx';
 
 export interface MetroStation {
@@ -29,9 +30,8 @@ export interface MetroLine {
   readonly geometry: MetroLineGeometry;
 }
 
-export type MetroLineGeometry =
-  | { readonly type: 'LineString'; readonly coordinates: ReadonlyArray<readonly [number, number]> }
-  | { readonly type: 'MultiLineString'; readonly coordinates: ReadonlyArray<ReadonlyArray<readonly [number, number]>> };
+/** @deprecated Use `LineGeometry` from `core/geometry`. Kept as alias for backwards compat. */
+export type MetroLineGeometry = LineGeometry;
 
 export interface MetroNetwork {
   readonly operatorId: MetroOperatorId;
