@@ -14,6 +14,7 @@
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { getCached, setCached, ttlForPath } from './_lib/cache';
 import { getAccessToken, TdxTokenError } from './_lib/tdx-token';
 
 const TDX_BASE = 'https://tdx.transportdata.tw/api/basic/';
@@ -45,6 +46,19 @@ export default async function handler(
   }
 
   const upstreamUrl = buildUpstreamUrl(segments, req.query);
+
+  // Serve from cache if a fresh entry exists. The cache key is the full
+  // upstream URL so the same path with different query params (e.g.
+  // $top / $filter) is treated as a separate cache entry.
+  const cached = getCached(upstreamUrl);
+  if (cached) {
+    res.status(cached.status);
+    if (cached.contentType) res.setHeader('Content-Type', cached.contentType);
+    res.setHeader('X-Tdx-Cache', 'HIT');
+    res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
+    res.send(cached.body);
+    return;
+  }
 
   let token: string;
   try {
@@ -81,8 +95,22 @@ export default async function handler(
     res.setHeader(key, value);
   });
   res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
+  res.setHeader('X-Tdx-Cache', 'MISS');
 
   const body = Buffer.from(await upstream.arrayBuffer());
+  // Only cache 2xx responses; 4xx/5xx are likely transient or auth errors
+  // and must not be sticky.
+  if (upstream.ok) {
+    setCached(
+      upstreamUrl,
+      {
+        status: upstream.status,
+        contentType: upstream.headers.get('content-type') ?? undefined,
+        body,
+      },
+      ttlForPath(rawPath)
+    );
+  }
   res.send(body);
 }
 
