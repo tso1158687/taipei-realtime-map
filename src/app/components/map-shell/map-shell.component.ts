@@ -7,6 +7,12 @@ import {
   inject,
   viewChild,
 } from '@angular/core';
+import {
+  FullscreenControl,
+  GeolocateControl,
+  NavigationControl,
+  ScaleControl,
+} from 'maplibre-gl';
 import { MapService } from '../../core/map';
 
 /**
@@ -39,7 +45,23 @@ export class MapShellComponent implements AfterViewInit, OnDestroy {
   private readonly container = viewChild.required<ElementRef<HTMLDivElement>>('container');
 
   ngAfterViewInit(): void {
-    this.mapService.initialize(this.container().nativeElement);
+    const map = this.mapService.initialize(this.container().nativeElement);
+    // Standard MapLibre chrome. Stack zoom/compass + fullscreen + geolocate
+    // top-right; scale bar bottom-left so attribution stays bottom-right.
+    map.addControl(
+      new NavigationControl({ visualizePitch: false, showCompass: true }),
+      'top-right'
+    );
+    map.addControl(new FullscreenControl(), 'top-right');
+    map.addControl(
+      new GeolocateControl({
+        positionOptions: { enableHighAccuracy: true },
+        trackUserLocation: false,
+        showUserLocation: true,
+      }),
+      'top-right'
+    );
+    map.addControl(new ScaleControl({ unit: 'metric', maxWidth: 120 }), 'bottom-left');
   }
 
   ngOnDestroy(): void {
