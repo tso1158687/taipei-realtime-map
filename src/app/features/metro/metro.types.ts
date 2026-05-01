@@ -38,3 +38,14 @@ export interface MetroNetwork {
   readonly stations: readonly MetroStation[];
   readonly lines: readonly MetroLine[];
 }
+
+export interface MetroTrainSignal {
+  readonly trainNumber: string;
+  readonly operatorId: MetroOperatorId;
+  readonly stationId: string;
+  readonly lineId?: string;
+  readonly direction?: number;
+  readonly destinationStationId?: string;
+  readonly destinationName?: { readonly zh: string; readonly en: string };
+  readonly estimateTimeSeconds?: number;
+}

@@ -3,7 +3,10 @@ import { LayerPanelComponent } from './components/layer-panel/layer-panel.compon
 import { LocaleSwitcherComponent } from './components/locale-switcher/locale-switcher.component';
 import { MapShellComponent } from './components/map-shell/map-shell.component';
 import { BusLayerComponent, BusVehicleLayerComponent } from './features/bus';
-import { MetroLayerComponent } from './features/metro';
+import {
+  MetroLayerComponent,
+  MetroTrainLayerComponent,
+} from './features/metro';
 import { RailLayerComponent } from './features/rail';
 import { YouBikeLayerComponent } from './features/youbike';
 
@@ -12,6 +15,7 @@ import { YouBikeLayerComponent } from './features/youbike';
   imports: [
     MapShellComponent,
     MetroLayerComponent,
+    MetroTrainLayerComponent,
     BusLayerComponent,
     BusVehicleLayerComponent,
     RailLayerComponent,
@@ -25,6 +29,7 @@ import { YouBikeLayerComponent } from './features/youbike';
   template: `
     <app-map-shell />
     <app-metro-layer />
+    <app-metro-train-layer />
     <app-bus-layer />
     <app-bus-vehicle-layer />
     <app-rail-layer />

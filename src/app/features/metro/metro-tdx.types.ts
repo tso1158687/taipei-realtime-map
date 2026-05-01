@@ -82,3 +82,24 @@ export interface TdxMetroShape {
   readonly Geometry: string;
   readonly EncodedPolyline?: string;
 }
+
+/**
+ * `/v2/Rail/Metro/LiveBoard/{Operator}` — per-station live train signals.
+ *
+ * Each row represents the next train approaching / present at a station.
+ * Schema varies a little between operators; fields below cover TRTC + TYMC.
+ */
+export interface TdxMetroLiveBoard {
+  readonly StationID: string;
+  readonly StationName?: TdxLocalizedName;
+  readonly TrainNumber?: string;
+  readonly LineID?: string;
+  readonly Direction?: number;
+  readonly DestinationStationID?: string;
+  readonly DestinationStationName?: TdxLocalizedName;
+  readonly TripHeadSign?: string;
+  readonly EstimateTime?: number; // seconds
+  readonly ServiceStatus?: number;
+  readonly IsLastBound?: boolean;
+  readonly UpdateTime?: string;
+}
