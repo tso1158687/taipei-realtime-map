@@ -8,6 +8,7 @@ describe('LayerPanelComponent', () => {
   let i18n: I18nService;
 
   beforeEach(() => {
+    localStorage.clear();
     TestBed.configureTestingModule({});
     layerState = TestBed.inject(LayerStateService);
     i18n = TestBed.inject(I18nService);

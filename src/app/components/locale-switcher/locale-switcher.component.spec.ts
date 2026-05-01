@@ -6,6 +6,7 @@ describe('LocaleSwitcherComponent', () => {
   let i18n: I18nService;
 
   beforeEach(() => {
+    localStorage.clear();
     TestBed.configureTestingModule({});
     i18n = TestBed.inject(I18nService);
   });

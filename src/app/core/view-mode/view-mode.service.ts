@@ -1,6 +1,9 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
+import { PreferencesService } from '../preferences';
 
 export type ViewMode = 'default' | 'underground';
+
+const PREFS_KEY = 'viewMode';
 
 /**
  * Global view-mode signal. `'underground'` darkens the OSM base tiles and
@@ -13,14 +16,19 @@ export type ViewMode = 'default' | 'underground';
  */
 @Injectable({ providedIn: 'root' })
 export class ViewModeService {
-  private readonly _mode = signal<ViewMode>('default');
+  private readonly prefs = inject(PreferencesService);
+  private readonly _mode = signal<ViewMode>(
+    this.prefs.read<ViewMode>(PREFS_KEY, 'default')
+  );
   readonly mode = this._mode.asReadonly();
 
   toggle(): void {
     this._mode.update((m) => (m === 'default' ? 'underground' : 'default'));
+    this.prefs.write(PREFS_KEY, this._mode());
   }
 
   set(mode: ViewMode): void {
     this._mode.set(mode);
+    this.prefs.write(PREFS_KEY, mode);
   }
 }

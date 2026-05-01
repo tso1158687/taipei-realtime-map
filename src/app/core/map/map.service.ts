@@ -1,10 +1,17 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
 import {
   Map as MapLibreMap,
   MapOptions,
   StyleSpecification,
 } from 'maplibre-gl';
 import { environment } from '../../../environments/environment';
+import { PreferencesService } from '../preferences';
+
+interface StoredView {
+  readonly lng: number;
+  readonly lat: number;
+  readonly zoom: number;
+}
 
 /** 台北市政府附近，作為地圖預設中心。 */
 export const TAIPEI_CENTER: readonly [number, number] = [121.5654, 25.033];
@@ -53,6 +60,7 @@ const OSM_RASTER_STYLE: StyleSpecification = {
  */
 @Injectable({ providedIn: 'root' })
 export class MapService {
+  private readonly prefs = inject(PreferencesService);
   private map: MapLibreMap | null = null;
 
   private readonly _isReady = signal(false);
@@ -79,17 +87,31 @@ export class MapService {
     const style: StyleSpecification | string = environment.maptilerKey
       ? `https://api.maptiler.com/maps/${environment.maptilerStyle}/style.json?key=${environment.maptilerKey}`
       : OSM_RASTER_STYLE;
+    const stored = this.prefs.read<StoredView | null>('mapView', null);
+    const center = stored ? [stored.lng, stored.lat] : [...TAIPEI_CENTER];
+    const zoom = stored?.zoom ?? DEFAULT_ZOOM;
     const map = new MapLibreMap({
       container,
       style,
-      center: [...TAIPEI_CENTER],
-      zoom: DEFAULT_ZOOM,
+      center: center as [number, number],
+      zoom,
       minZoom: MIN_ZOOM,
       maxZoom: MAX_ZOOM,
       attributionControl: { compact: true },
       ...options,
     });
     map.on('load', () => this._isReady.set(true));
+
+    // Persist view (debounced via moveend, which fires once after a pan/zoom).
+    map.on('moveend', () => {
+      const c = map.getCenter();
+      this.prefs.write('mapView', {
+        lng: c.lng,
+        lat: c.lat,
+        zoom: map.getZoom(),
+      });
+    });
+
     this.map = map;
     return map;
   }

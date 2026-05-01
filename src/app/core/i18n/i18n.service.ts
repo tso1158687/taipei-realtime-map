@@ -1,4 +1,5 @@
-import { Injectable, computed, signal } from '@angular/core';
+import { Injectable, computed, inject, signal } from '@angular/core';
+import { PreferencesService } from '../preferences';
 import {
   DEFAULT_LOCALE,
   DICTIONARIES,
@@ -18,7 +19,8 @@ import {
  */
 @Injectable({ providedIn: 'root' })
 export class I18nService {
-  private readonly _locale = signal<Locale>(DEFAULT_LOCALE);
+  private readonly prefs = inject(PreferencesService);
+  private readonly _locale = signal<Locale>(this.readInitialLocale());
 
   readonly locale = this._locale.asReadonly();
 
@@ -28,6 +30,12 @@ export class I18nService {
 
   setLocale(locale: Locale): void {
     this._locale.set(locale);
+    this.prefs.write('locale', locale);
+  }
+
+  private readInitialLocale(): Locale {
+    const stored = this.prefs.read<Locale | null>('locale', null);
+    return stored === 'zh-TW' || stored === 'en' ? stored : DEFAULT_LOCALE;
   }
 
   /**

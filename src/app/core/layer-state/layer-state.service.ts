@@ -1,4 +1,7 @@
-import { Injectable, Signal, computed, signal } from '@angular/core';
+import { Injectable, Signal, computed, inject, signal } from '@angular/core';
+import { PreferencesService } from '../preferences';
+
+const PREFS_KEY = 'layerVisibility';
 
 /**
  * Lifecycle state of a registered layer.
@@ -33,13 +36,20 @@ export interface RegisterOptions {
  */
 @Injectable({ providedIn: 'root' })
 export class LayerStateService {
+  private readonly prefs = inject(PreferencesService);
   private readonly _layers = signal<readonly LayerInfo[]>([]);
+  private readonly storedVisibility: Record<string, boolean> = this.prefs.read(
+    PREFS_KEY,
+    {}
+  );
 
   readonly layers = this._layers.asReadonly();
 
   /**
    * Register a layer. No-op if the key already exists, so feature components
-   * can call it from constructors without worrying about HMR re-runs.
+   * can call it from constructors without worrying about HMR re-runs. If a
+   * stored visibility preference exists for the key, it overrides
+   * `options.initialVisible`.
    */
   register(
     key: string,
@@ -47,10 +57,11 @@ export class LayerStateService {
     options: RegisterOptions = {}
   ): void {
     if (this._layers().some((l) => l.key === key)) return;
+    const stored = this.storedVisibility[key];
     const entry: LayerInfo = {
       key,
       label,
-      visible: options.initialVisible ?? true,
+      visible: stored ?? options.initialVisible ?? true,
       status: 'idle',
     };
     this._layers.update((arr) => [...arr, entry]);
@@ -70,6 +81,8 @@ export class LayerStateService {
     this._layers.update((arr) =>
       arr.map((l) => (l.key === key ? { ...l, visible } : l))
     );
+    this.storedVisibility[key] = visible;
+    this.prefs.write(PREFS_KEY, this.storedVisibility);
   }
 
   /** Snapshot read; doesn't track in `effect()`. Use `visibilityOf` for reactive code. */

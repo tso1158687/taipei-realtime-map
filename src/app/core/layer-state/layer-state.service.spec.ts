@@ -5,6 +5,7 @@ describe('LayerStateService', () => {
   let service: LayerStateService;
 
   beforeEach(() => {
+    localStorage.clear();
     TestBed.configureTestingModule({});
     service = TestBed.inject(LayerStateService);
     service._resetForTesting();
