@@ -1,11 +1,17 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { MapShellComponent } from './components/map-shell/map-shell.component';
+import { MetroLayerComponent } from './features/metro';
 
 @Component({
   selector: 'app-root',
-  imports: [MapShellComponent],
+  imports: [MapShellComponent, MetroLayerComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `<app-map-shell />`,
+  // map-shell first so the map is constructed before layer components run
+  // their effects.
+  template: `
+    <app-map-shell />
+    <app-metro-layer />
+  `,
   styles: [
     `
       :host {
