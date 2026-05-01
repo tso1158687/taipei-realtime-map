@@ -86,3 +86,21 @@
 - 替代：做完整 3D port；放棄因 context 不足，會中斷其他 phase
 - 接續：Phase 8（或下次 session 接手時）會挑回來實作完整 Three.js layer
 
+## Phase 7+ - 上線後修正
+
+**D-013 — 全域 TdxScheduler token bucket（取代 per-feature stagger）**
+- 選：在 `core/tdx/scheduler.ts` 建立全域 token-bucket scheduler；
+  `TdxBaseService.get` 每筆請求先 `acquire()` 再發出，
+  release 間隔 = `TDX_RATE_LIMIT_DELAY_MS / 4`（prod ≈ 2.75s，全域 ~3.6 reqs / 10s）
+- 理由：先前 per-feature stagger（FEATURE_OFFSET_MULTIPLIER）只能延遲首發，
+  但 Metro LiveBoard / Bus realtime / YouBike availability 各自的 polling timer
+  會各自獨立衝刺，跨 feature 仍會撞滿 5 reqs / 10s 的免費 tier 上限。
+  改用全域佇列後所有出站請求被串成一條序列，從根本上避開 429 storm
+- 替代：(a) 上 Redis token bucket 在 serverless proxy 端；過於重，client-side 已足；
+  (b) 把 polling 集中成單一輪詢服務；改動範圍太大，等 Phase 8 再說
+- 測試 trade-off：scheduler 把同步 http.get 包成 Promise → microtask，
+  HttpTestingController 抓不到。解法：當 `retryDelayMs === 0`（test 環境）
+  bypass scheduler；同時在 5 個 service spec 注入 `TDX_RATE_LIMIT_DELAY_MS=0`
+- 同步移除 bus/rail/youbike layer 的 `FEATURE_OFFSET_MULTIPLIER`
+  — scheduler 已經在更下層處理，per-feature offset 就是雜訊
+

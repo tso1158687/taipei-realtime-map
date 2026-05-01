@@ -73,9 +73,6 @@ export class YouBikeLayerComponent implements OnDestroy {
     'NewTaipei',
   ];
 
-  /** See bus-layer.component.ts for why this is a multiplier of rate-limit delay. */
-  private static readonly FEATURE_OFFSET_MULTIPLIER = 12;
-
   constructor() {
     for (const city of YouBikeLayerComponent.SUPPORTED_CITIES) {
       const meta = BUS_CITIES[city];
@@ -118,13 +115,8 @@ export class YouBikeLayerComponent implements OnDestroy {
 
     from(cities)
       .pipe(
-        concatMap((city, index) => {
-          const baseDelay = Math.max(0, this.rateLimitDelayMs);
-          const delay =
-            index === 0
-              ? baseDelay * YouBikeLayerComponent.FEATURE_OFFSET_MULTIPLIER
-              : baseDelay;
-          const wait$ = delay > 0 ? timer(delay) : of(0);
+        concatMap((city) => {
+          const wait$ = of(0);
           return wait$.pipe(
             mergeMap(() =>
               combineLatest([

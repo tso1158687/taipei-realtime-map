@@ -4,6 +4,7 @@ import {
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
+import { TDX_RATE_LIMIT_DELAY_MS } from '../../core/tdx';
 import {
   YouBikeService,
   mapAvailability,
@@ -16,7 +17,11 @@ describe('YouBikeService', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: TDX_RATE_LIMIT_DELAY_MS, useValue: 0 },
+      ],
     });
     service = TestBed.inject(YouBikeService);
     httpMock = TestBed.inject(HttpTestingController);

@@ -4,6 +4,7 @@ import {
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
+import { TDX_RATE_LIMIT_DELAY_MS } from './rate-limit';
 import { TdxBaseService } from './tdx-base.service';
 
 describe('TdxBaseService', () => {
@@ -12,7 +13,12 @@ describe('TdxBaseService', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        // Disable the scheduler in tests so http.get fires synchronously.
+        { provide: TDX_RATE_LIMIT_DELAY_MS, useValue: 0 },
+      ],
     });
     service = TestBed.inject(TdxBaseService);
     httpMock = TestBed.inject(HttpTestingController);

@@ -109,29 +109,20 @@ export class BusLayerComponent implements OnDestroy {
     });
   }
 
-  /**
-   * Multiple of `rateLimitDelayMs` to wait before this feature's first
-   * request. Encoded as a multiplier rather than a fixed ms value so tests
-   * (which set `rateLimitDelayMs` to 0) don't wait, and prod (11s) gets
-   * Metro → wait → Bus → wait → ... staggering for free.
-   */
-  private static readonly FEATURE_OFFSET_MULTIPLIER = 2;
-
   private loadAllCities(): void {
     const cities = Object.keys(BUS_CITIES) as BusCityId[];
     for (const city of cities) {
       this.layerState.setStatus(layerKeyFor(city), 'loading');
     }
 
+    // Cities still concatMap'd (sequential) so the layer panel ticks one
+    // at a time, but global TdxScheduler enforces the actual rate limit
+    // across all features → no need for an extra feature offset here.
     from(cities)
       .pipe(
-        concatMap((city, index) => {
+        concatMap((city) => {
           const baseDelay = Math.max(0, this.rateLimitDelayMs);
-          const delay =
-            index === 0
-              ? baseDelay * BusLayerComponent.FEATURE_OFFSET_MULTIPLIER
-              : baseDelay;
-          const wait$ = delay > 0 ? timer(delay) : of(0);
+          const wait$ = baseDelay > 0 ? timer(0) : of(0);
           return wait$.pipe(
             mergeMap(() => this.bus.fetchNetwork(city)),
             tap((net) => {

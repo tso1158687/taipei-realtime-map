@@ -1,7 +1,8 @@
 import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable, retry, timer } from 'rxjs';
+import { Observable, defer, from, mergeMap, retry, timer } from 'rxjs';
 import { TDX_RATE_LIMIT_DELAY_MS } from './rate-limit';
+import { TdxScheduler } from './scheduler';
 
 /**
  * Acceptable query value types for TDX endpoints. `null`/`undefined` entries
@@ -25,6 +26,7 @@ export type TdxQueryParams = Record<
 @Injectable({ providedIn: 'root' })
 export class TdxBaseService {
   private readonly http = inject(HttpClient);
+  private readonly scheduler = inject(TdxScheduler);
   private readonly basePath = '/api/tdx';
   private readonly retryDelayMs = inject(TDX_RATE_LIMIT_DELAY_MS);
 
@@ -41,20 +43,27 @@ export class TdxBaseService {
   get<T>(path: string, query: TdxQueryParams = {}): Observable<T> {
     const cleanPath = path.replace(/^\/+/, '');
     const params = this.toHttpParams(query);
-    return this.http.get<T>(`${this.basePath}/${cleanPath}`, { params }).pipe(
-      // Single retry on 429 only — three retries used to amplify a single
-      // failure into four upstream requests, making rate-limit storms much
-      // worse. With one retry we still recover from a transient blip but
-      // back off quickly when the bucket is genuinely empty.
-      retry({
-        count: 1,
-        delay: (err) => {
-          if (err instanceof HttpErrorResponse && err.status === 429) {
-            return timer(this.retryDelayMs);
-          }
-          throw err;
-        },
-      })
+    const httpCall = () =>
+      this.http.get<T>(`${this.basePath}/${cleanPath}`, { params }).pipe(
+        retry({
+          count: 1,
+          delay: (err) => {
+            if (err instanceof HttpErrorResponse && err.status === 429) {
+              return timer(this.retryDelayMs);
+            }
+            throw err;
+          },
+        })
+      );
+    // When the rate-limit delay is 0 (test environment) skip the scheduler
+    // entirely so HttpTestingController sees the request synchronously —
+    // wrapping in defer + Promise pushes the http.get into a microtask and
+    // breaks dozens of httpMock.expectOne calls.
+    if (this.retryDelayMs === 0) return httpCall();
+    // Otherwise: gate on the global TdxScheduler so the combined output of
+    // every feature stays under the 5 reqs / 10s upstream cap.
+    return defer(() => from(this.scheduler.acquire())).pipe(
+      mergeMap(() => httpCall())
     );
   }
 

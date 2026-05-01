@@ -94,23 +94,16 @@ export class RailLayerComponent implements OnDestroy {
     });
   }
 
-  /** See bus-layer.component.ts for why this is a multiplier of rate-limit delay. */
-  private static readonly FEATURE_OFFSET_MULTIPLIER = 8;
-
   private loadAllModes(): void {
     const modes = Object.keys(RAIL_OPERATORS) as RailMode[];
     for (const mode of modes) {
       this.layerState.setStatus(layerKeyFor(mode), 'loading');
     }
+    // Global TdxScheduler handles rate limiting; modes can fire eagerly.
     from(modes)
       .pipe(
-        concatMap((mode, index) => {
-          const baseDelay = Math.max(0, this.rateLimitDelayMs);
-          const delay =
-            index === 0
-              ? baseDelay * RailLayerComponent.FEATURE_OFFSET_MULTIPLIER
-              : baseDelay;
-          const wait$ = delay > 0 ? timer(delay) : of(0);
+        concatMap((mode) => {
+          const wait$ = of(0);
           return wait$.pipe(
             mergeMap(() => this.rail.fetchNetwork(mode)),
             tap((net) => {

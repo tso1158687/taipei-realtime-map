@@ -5,6 +5,7 @@ export {
   TDX_RATE_LIMIT_DELAY_MS,
   TDX_RATE_LIMIT_DELAY_MS_DEFAULT,
 } from './rate-limit';
+export { TdxScheduler } from './scheduler';
 export {
   METRO_OPERATORS,
   RAIL_OPERATORS,
