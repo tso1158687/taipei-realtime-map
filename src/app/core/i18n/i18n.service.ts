@@ -31,6 +31,9 @@ export class I18nService {
   setLocale(locale: Locale): void {
     this._locale.set(locale);
     this.prefs.write('locale', locale);
+    if (typeof document !== 'undefined') {
+      document.documentElement.lang = locale === 'en' ? 'en' : 'zh-Hant';
+    }
   }
 
   private readInitialLocale(): Locale {

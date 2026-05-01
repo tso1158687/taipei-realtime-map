@@ -30,7 +30,6 @@ import { LayerInfo, LayerStateService } from '../../core/layer-state';
             <input
               type="checkbox"
               [checked]="layer.visible"
-              [attr.aria-label]="labelFor(layer)"
               (change)="onToggle(layer.key, $event)"
             />
             <span class="text">{{ labelFor(layer) }}</span>
@@ -38,6 +37,7 @@ import { LayerInfo, LayerStateService } from '../../core/layer-state';
               class="status"
               [class]="'status-' + layer.status"
               [attr.title]="layer.errorMessage || null"
+              role="img"
               [attr.aria-label]="statusAriaFor(layer)"
             ></span>
           </label>
@@ -79,6 +79,13 @@ import { LayerInfo, LayerStateService } from '../../core/layer-state';
         cursor: pointer;
         width: 14px;
         height: 14px;
+      }
+      .row input[type='checkbox']:focus-visible {
+        outline: 2px solid #0070bd;
+        outline-offset: 1px;
+      }
+      .row:focus-within {
+        background: rgba(0, 112, 189, 0.08);
       }
       .text {
         flex: 1;

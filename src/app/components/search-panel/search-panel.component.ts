@@ -106,6 +106,12 @@ import {
         cursor: pointer;
         font: inherit;
       }
+      .header:focus-visible,
+      input:focus-visible,
+      .go:focus-visible {
+        outline: 2px solid #0070bd;
+        outline-offset: 1px;
+      }
       .title { font-weight: 600; }
       .form { display: flex; flex-direction: column; gap: 6px; padding: 0 10px 6px; }
       .row { display: flex; flex-direction: column; gap: 2px; }
