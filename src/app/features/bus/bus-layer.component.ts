@@ -24,9 +24,22 @@ import {
   TDX_RATE_LIMIT_DELAY_MS,
 } from '../../core/tdx';
 import { BusService } from './bus.service';
-import type { BusNetwork, BusRoute, BusStop } from './bus.types';
+import type { BusEta, BusNetwork, BusRoute, BusStop } from './bus.types';
 
 const layerKeyFor = (city: BusCityId): string => `bus.${city}`;
+
+function formatEta(eta: BusEta, isEn: boolean): string {
+  // Status codes: 0 normal, 1 not running, 2 not started, 3 detour, 4 at stop, 5 halted
+  if (eta.stopStatus === 1) return isEn ? 'Not running' : '今日停駛';
+  if (eta.stopStatus === 2) return isEn ? 'Not started' : '尚未發車';
+  if (eta.stopStatus === 3) return isEn ? 'Detoured' : '繞道';
+  if (eta.stopStatus === 4) return isEn ? 'At stop' : '進站中';
+  if (eta.stopStatus === 5) return isEn ? 'Halted' : '暫停';
+  if (eta.estimateTimeSeconds == null) return isEn ? 'Unknown' : '—';
+  if (eta.estimateTimeSeconds < 60) return isEn ? 'Approaching' : '即將進站';
+  const minutes = Math.round(eta.estimateTimeSeconds / 60);
+  return isEn ? `${minutes} min` : `${minutes} 分鐘`;
+}
 
 /**
  * Renders Bus static data (routes + stops) for all four covered cities
@@ -301,12 +314,27 @@ export class BusLayerComponent implements OnDestroy {
     const coords = feature.geometry.coordinates as [number, number];
     const props = (feature.properties ?? {}) as Record<string, string>;
     const cityMeta = BUS_CITIES[props['city'] as BusCityId];
+    const dom = this.buildPopupDom(props, cityMeta?.color ?? '#666');
+    const etaContainer = dom.querySelector<HTMLDivElement>('.eta-container');
 
     this.popup?.remove();
     this.popup = new Popup({ closeButton: true, closeOnClick: true })
       .setLngLat(coords as LngLatLike)
-      .setDOMContent(this.buildPopupDom(props, cityMeta?.color ?? '#666'))
+      .setDOMContent(dom)
       .addTo(this.mapService.getMap());
+
+    if (etaContainer) {
+      this.bus
+        .fetchEtas(props['city'] as BusCityId, props['stopUid'])
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe({
+          next: (etas) => this.renderEtas(etaContainer, etas),
+          error: () => {
+            etaContainer.textContent =
+              this.i18n.locale() === 'en' ? 'Failed to load ETAs' : '載入 ETA 失敗';
+          },
+        });
+    }
   }
 
   private buildPopupDom(
@@ -353,7 +381,56 @@ export class BusLayerComponent implements OnDestroy {
       accent.appendChild(lines);
     }
 
+    // Placeholder for async-loaded ETA list. handleStopClick fills it in.
+    const etaContainer = document.createElement('div');
+    etaContainer.className = 'eta-container';
+    etaContainer.style.marginTop = '6px';
+    etaContainer.style.fontSize = '12px';
+    etaContainer.style.borderTop = '1px solid #eee';
+    etaContainer.style.paddingTop = '6px';
+    etaContainer.textContent = isEn ? 'Loading…' : '載入中…';
+    accent.appendChild(etaContainer);
+
     return wrapper;
+  }
+
+  private renderEtas(container: HTMLElement, etas: readonly BusEta[]): void {
+    const isEn = this.i18n.locale() === 'en';
+    container.replaceChildren();
+
+    if (etas.length === 0) {
+      container.textContent = isEn
+        ? 'No buses scheduled'
+        : '目前無路線資料';
+      return;
+    }
+
+    // Show top 6 by ascending estimate time, prioritising 'normal' status.
+    const ranked = [...etas]
+      .map((e) => ({
+        ...e,
+        rank:
+          e.stopStatus === 0 || e.stopStatus === 4
+            ? e.estimateTimeSeconds ?? 99_999
+            : 999_999,
+      }))
+      .sort((a, b) => a.rank - b.rank)
+      .slice(0, 6);
+
+    for (const eta of ranked) {
+      const row = document.createElement('div');
+      row.style.display = 'flex';
+      row.style.justifyContent = 'space-between';
+      row.style.padding = '2px 0';
+      const left = document.createElement('span');
+      left.textContent = isEn ? eta.routeName.en || eta.routeId : eta.routeName.zh || eta.routeId;
+      const right = document.createElement('span');
+      right.style.color = '#555';
+      right.textContent = formatEta(eta, isEn);
+      row.appendChild(left);
+      row.appendChild(right);
+      container.appendChild(row);
+    }
   }
 
   // ---- lifecycle ---------------------------------------------------------

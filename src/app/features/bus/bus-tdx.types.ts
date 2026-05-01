@@ -65,6 +65,23 @@ export interface TdxBusShape {
   readonly EncodedPolyline?: string;
 }
 
+/** `/v2/Bus/EstimatedTimeOfArrival/City/{City}` — ETA per (stop, route, direction). */
+export interface TdxBusEta {
+  readonly StopUID: string;
+  readonly StopID: string;
+  readonly StopName: TdxLocalizedName;
+  readonly RouteUID: string;
+  readonly RouteID: string;
+  readonly RouteName: TdxLocalizedName;
+  readonly Direction: number;
+  readonly EstimateTime?: number; // seconds; undefined when no live data
+  /**
+   * 0=normal, 1=not running, 2=not started yet, 3=detour, 4=at stop, 5=halted
+   */
+  readonly StopStatus: number;
+  readonly NextBusTime?: string;
+}
+
 /** `/v2/Bus/RealTimeByFrequency/City/{City}` — A1 GPS vehicle positions. */
 export interface TdxBusVehicle {
   readonly PlateNumb: string;

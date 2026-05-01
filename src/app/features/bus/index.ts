@@ -7,4 +7,5 @@ export type {
   BusStop,
   BusNetwork,
   BusVehicle,
+  BusEta,
 } from './bus.types';

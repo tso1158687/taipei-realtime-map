@@ -43,6 +43,18 @@ export interface BusNetwork {
   readonly stops: readonly BusStop[];
 }
 
+export interface BusEta {
+  readonly stopUid: string;
+  readonly routeUid: string;
+  readonly routeId: string;
+  readonly routeName: { readonly zh: string; readonly en: string };
+  readonly direction: number;
+  /** Seconds until arrival, when available. */
+  readonly estimateTimeSeconds?: number;
+  /** 0=normal, 1=not running, 2=not started, 3=detour, 4=at stop, 5=halted */
+  readonly stopStatus: number;
+}
+
 export interface BusVehicle {
   /** PlateNumb, e.g. 'EAL-1234'. Globally unique per city + day. */
   readonly id: string;

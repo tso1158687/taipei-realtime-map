@@ -58,6 +58,8 @@ const REALTIME_PATH_PATTERNS: readonly RegExp[] = [
   /\/RealTime\b/i,
   /\/RTNT\b/i,
   /\/PlateInfo\b/i,
+  /\/EstimatedTimeOfArrival\b/i,
+  /\/Availability\b/i, // YouBike availability
 ];
 
 /**

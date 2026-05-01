@@ -8,11 +8,12 @@ import {
   unwrapEnvelope,
 } from '../../core/tdx';
 import type {
+  TdxBusEta,
   TdxBusRoute,
   TdxBusShape,
   TdxBusStopOfRoute,
 } from './bus-tdx.types';
-import type { BusNetwork, BusRoute, BusStop } from './bus.types';
+import type { BusEta, BusNetwork, BusRoute, BusStop } from './bus.types';
 
 /**
  * Service for loading static Bus data from TDX V2.
@@ -62,6 +63,43 @@ export class BusService {
       stops: this.fetchStops(city),
     }).pipe(map(({ routes, stops }) => ({ city, routes, stops })));
   }
+
+  /**
+   * Estimated arrival times at a single stop. Filtered server-side via
+   * OData `$filter` so we don't pull the full city payload (~tens of MB)
+   * just to find ~10 entries.
+   */
+  fetchEtas(city: BusCityId, stopUid: string): Observable<BusEta[]> {
+    return this.tdx
+      .get<unknown>(`v2/Bus/EstimatedTimeOfArrival/City/${city}`, {
+        $filter: `StopUID eq '${stopUid}'`,
+        $top: 50,
+      })
+      .pipe(
+        map((payload) => {
+          const raw = unwrapEnvelope<TdxBusEta>(
+            payload,
+            'BusEstimatedTimeOfArrivalDatas'
+          );
+          return raw.map(mapEta);
+        })
+      );
+  }
+}
+
+export function mapEta(raw: TdxBusEta): BusEta {
+  return {
+    stopUid: raw.StopUID,
+    routeUid: raw.RouteUID,
+    routeId: raw.RouteID,
+    routeName: {
+      zh: raw.RouteName?.Zh_tw ?? '',
+      en: raw.RouteName?.En ?? '',
+    },
+    direction: raw.Direction,
+    estimateTimeSeconds: raw.EstimateTime,
+    stopStatus: raw.StopStatus,
+  };
 }
 
 // ---------------------------------------------------------------------------
