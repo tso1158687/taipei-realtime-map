@@ -63,8 +63,21 @@ export class YouBikeLayerComponent implements OnDestroy {
   private popup: Popup | null = null;
   private loaded = false;
 
+  /**
+   * YouBike data via TDX is only published for Taipei + NewTaipei. Taoyuan
+   * and Keelung return 404 from `v2/Bike/Station/{City}`. We hard-code the
+   * supported subset here rather than spam 404s and mark layers as 'error'.
+   */
+  private static readonly SUPPORTED_CITIES: readonly BusCityId[] = [
+    'Taipei',
+    'NewTaipei',
+  ];
+
+  /** See bus-layer.component.ts for why this is a multiplier of rate-limit delay. */
+  private static readonly FEATURE_OFFSET_MULTIPLIER = 12;
+
   constructor() {
-    for (const city of Object.keys(BUS_CITIES) as BusCityId[]) {
+    for (const city of YouBikeLayerComponent.SUPPORTED_CITIES) {
       const meta = BUS_CITIES[city];
       this.layerState.register(layerKeyFor(city), {
         zh: `${meta.nameZh} YouBike`,
@@ -87,6 +100,7 @@ export class YouBikeLayerComponent implements OnDestroy {
       for (const layer of layers) {
         if (!layer.key.startsWith('youbike.')) continue;
         const city = layer.key.slice('youbike.'.length) as BusCityId;
+        if (!YouBikeLayerComponent.SUPPORTED_CITIES.includes(city)) continue;
         const visStr = layer.visible ? 'visible' : 'none';
         const layerId = `youbike-stations-layer-${city}`;
         if (map.getLayer(layerId)) {
@@ -97,7 +111,7 @@ export class YouBikeLayerComponent implements OnDestroy {
   }
 
   private loadAllCities(): void {
-    const cities = Object.keys(BUS_CITIES) as BusCityId[];
+    const cities = YouBikeLayerComponent.SUPPORTED_CITIES;
     for (const city of cities) {
       this.layerState.setStatus(layerKeyFor(city), 'loading');
     }
@@ -105,7 +119,11 @@ export class YouBikeLayerComponent implements OnDestroy {
     from(cities)
       .pipe(
         concatMap((city, index) => {
-          const delay = index === 0 ? 0 : Math.max(0, this.rateLimitDelayMs);
+          const baseDelay = Math.max(0, this.rateLimitDelayMs);
+          const delay =
+            index === 0
+              ? baseDelay * YouBikeLayerComponent.FEATURE_OFFSET_MULTIPLIER
+              : baseDelay;
           const wait$ = delay > 0 ? timer(delay) : of(0);
           return wait$.pipe(
             mergeMap(() =>

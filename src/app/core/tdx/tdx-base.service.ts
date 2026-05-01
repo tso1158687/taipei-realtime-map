@@ -42,8 +42,12 @@ export class TdxBaseService {
     const cleanPath = path.replace(/^\/+/, '');
     const params = this.toHttpParams(query);
     return this.http.get<T>(`${this.basePath}/${cleanPath}`, { params }).pipe(
+      // Single retry on 429 only — three retries used to amplify a single
+      // failure into four upstream requests, making rate-limit storms much
+      // worse. With one retry we still recover from a transient blip but
+      // back off quickly when the bucket is genuinely empty.
       retry({
-        count: 3,
+        count: 1,
         delay: (err) => {
           if (err instanceof HttpErrorResponse && err.status === 429) {
             return timer(this.retryDelayMs);

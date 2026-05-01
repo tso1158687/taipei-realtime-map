@@ -131,23 +131,28 @@ export function mergeLinesAndShapes(
   }
   if (meta.length === 0) {
     // No metadata (e.g. THSR) — synthesise lines straight from shapes.
-    return shapes.map((s) => ({
-      id: `${mode}-${s.LineID}`,
-      lineId: s.LineID,
-      mode,
-      name: {
-        zh: s.LineName?.Zh_tw ?? s.LineID,
-        en: s.LineName?.En ?? s.LineID,
-      },
-      color: fallbackColor,
-      geometry: shapeByLineId.get(s.LineID) ?? EMPTY_GEOMETRY,
-    }));
+    return shapes
+      .filter((s) => !!s.LineID)
+      .map((s) => ({
+        id: `${mode}-${s.LineID}`,
+        lineId: s.LineID,
+        mode,
+        name: {
+          zh: s.LineName?.Zh_tw ?? s.LineID,
+          en: s.LineName?.En ?? s.LineID,
+        },
+        color: fallbackColor,
+        geometry: shapeByLineId.get(s.LineID) ?? EMPTY_GEOMETRY,
+      }));
   }
   return meta.map((line) => ({
     id: `${mode}-${line.LineID}`,
     lineId: line.LineID,
     mode,
-    name: { zh: line.LineName.Zh_tw, en: line.LineName.En },
+    name: {
+      zh: line.LineName?.Zh_tw ?? line.LineID,
+      en: line.LineName?.En ?? line.LineID,
+    },
     color: normalizeColor(line.LineColor) ?? fallbackColor,
     geometry: shapeByLineId.get(line.LineID) ?? EMPTY_GEOMETRY,
   }));

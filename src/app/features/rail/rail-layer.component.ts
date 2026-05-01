@@ -94,6 +94,9 @@ export class RailLayerComponent implements OnDestroy {
     });
   }
 
+  /** See bus-layer.component.ts for why this is a multiplier of rate-limit delay. */
+  private static readonly FEATURE_OFFSET_MULTIPLIER = 8;
+
   private loadAllModes(): void {
     const modes = Object.keys(RAIL_OPERATORS) as RailMode[];
     for (const mode of modes) {
@@ -102,7 +105,11 @@ export class RailLayerComponent implements OnDestroy {
     from(modes)
       .pipe(
         concatMap((mode, index) => {
-          const delay = index === 0 ? 0 : Math.max(0, this.rateLimitDelayMs);
+          const baseDelay = Math.max(0, this.rateLimitDelayMs);
+          const delay =
+            index === 0
+              ? baseDelay * RailLayerComponent.FEATURE_OFFSET_MULTIPLIER
+              : baseDelay;
           const wait$ = delay > 0 ? timer(delay) : of(0);
           return wait$.pipe(
             mergeMap(() => this.rail.fetchNetwork(mode)),
