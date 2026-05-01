@@ -9,6 +9,7 @@ import {
   buildLineIdsByStation,
   mapStation,
   mergeLinesAndShapes,
+  parseWktGeometry,
   unwrapEnvelope,
 } from './metro.service';
 
@@ -90,43 +91,31 @@ describe('MetroService', () => {
   });
 
   describe('fetchLines', () => {
-    it('requests Shape with $format=GEOJSON and merges with Line metadata', () => {
+    it('parses WKT MULTILINESTRING from Shape endpoint and merges with Line metadata', () => {
       let lines: ReturnType<typeof Object> | undefined;
       service.fetchLines('TRTC').subscribe((r) => (lines = r));
 
       httpMock
         .expectOne((r) => r.url.endsWith('/v2/Rail/Metro/Line/TRTC'))
-        .flush({
-          Lines: [
-            {
-              LineID: 'BR',
-              LineName: { Zh_tw: '文湖線', En: 'Wenhu Line' },
-              LineColor: '#a35e2c',
-            },
-          ],
-        });
-
-      const shapeReq = httpMock.expectOne(
-        (r) =>
-          r.url.endsWith('/v2/Rail/Metro/Shape/TRTC') &&
-          r.params.get('$format') === 'GEOJSON'
-      );
-      shapeReq.flush({
-        type: 'FeatureCollection',
-        features: [
+        .flush([
           {
-            type: 'Feature',
-            geometry: {
-              type: 'LineString',
-              coordinates: [
-                [121.59, 25.06],
-                [121.6, 25.07],
-              ],
-            },
-            properties: { LineID: 'BR' },
+            LineNo: 'BR',
+            LineID: 'BR',
+            LineName: { Zh_tw: '文湖線', En: 'Wenhu Line' },
+            LineColor: '#a35e2c',
           },
-        ],
-      });
+        ]);
+
+      httpMock
+        .expectOne((r) => r.url.endsWith('/v2/Rail/Metro/Shape/TRTC'))
+        .flush([
+          {
+            LineID: 'BR',
+            LineName: { Zh_tw: '文湖線', En: 'Wenhu Line' },
+            Geometry:
+              'MULTILINESTRING((121.59 25.06,121.60 25.07),(121.61 25.08,121.62 25.09))',
+          },
+        ]);
 
       const arr = lines as unknown as Array<{
         id: string;
@@ -136,7 +125,34 @@ describe('MetroService', () => {
       expect(arr.length).toBe(1);
       expect(arr[0].id).toBe('TRTC-BR');
       expect(arr[0].color).toBe('#a35e2c');
+      expect(arr[0].geometry.type).toBe('MultiLineString');
+    });
+
+    it('parses WKT LINESTRING into LineString geometry', () => {
+      let lines: ReturnType<typeof Object> | undefined;
+      service.fetchLines('TRTC').subscribe((r) => (lines = r));
+
+      httpMock
+        .expectOne((r) => r.url.endsWith('/v2/Rail/Metro/Line/TRTC'))
+        .flush([
+          {
+            LineID: 'BL',
+            LineName: { Zh_tw: '板南線', En: 'Bannan Line' },
+            LineColor: '#0a59ae',
+          },
+        ]);
+      httpMock
+        .expectOne((r) => r.url.endsWith('/v2/Rail/Metro/Shape/TRTC'))
+        .flush([
+          {
+            LineID: 'BL',
+            Geometry: 'LINESTRING(121.50 25.04,121.55 25.05,121.60 25.06)',
+          },
+        ]);
+
+      const arr = lines as unknown as Array<{ geometry: { type: string; coordinates: unknown[] } }>;
       expect(arr[0].geometry.type).toBe('LineString');
+      expect(arr[0].geometry.coordinates.length).toBe(3);
     });
 
     it('falls back to the operator brand color when LineColor is missing', () => {
@@ -145,14 +161,12 @@ describe('MetroService', () => {
 
       httpMock
         .expectOne((r) => r.url.endsWith('/v2/Rail/Metro/Line/TYMC'))
-        .flush({
-          Lines: [
-            { LineID: 'A', LineName: { Zh_tw: '機場線', En: 'Airport Line' } },
-          ],
-        });
+        .flush([
+          { LineID: 'A', LineName: { Zh_tw: '機場線', En: 'Airport Line' } },
+        ]);
       httpMock
         .expectOne((r) => r.url.endsWith('/v2/Rail/Metro/Shape/TYMC'))
-        .flush({ type: 'FeatureCollection', features: [] });
+        .flush([]);
 
       const arr = lines as unknown as Array<{ color: string }>;
       expect(arr[0].color).toBe('#7e277e'); // TYMC operator brand color
@@ -193,19 +207,14 @@ describe('MetroService', () => {
       expect(station.lineIds).toEqual(['BL', 'R']);
     });
 
-    it('mergeLinesAndShapes: coalesces multiple features per line into MultiLineString', () => {
+    it('mergeLinesAndShapes: WKT MULTILINESTRING with multiple groups → MultiLineString', () => {
       const lines = mergeLinesAndShapes(
         [{ LineID: 'BR', LineName: { Zh_tw: '文湖線', En: 'Wenhu' } }],
         [
           {
-            type: 'Feature',
-            geometry: { type: 'LineString', coordinates: [[1, 1], [2, 2]] },
-            properties: { LineID: 'BR' },
-          },
-          {
-            type: 'Feature',
-            geometry: { type: 'LineString', coordinates: [[3, 3], [4, 4]] },
-            properties: { LineID: 'BR' },
+            LineID: 'BR',
+            Geometry:
+              'MULTILINESTRING((1 1,2 2),(3 3,4 4))',
           },
         ],
         'TRTC'
@@ -214,6 +223,27 @@ describe('MetroService', () => {
       if (lines[0].geometry.type === 'MultiLineString') {
         expect(lines[0].geometry.coordinates.length).toBe(2);
       }
+    });
+
+    it('parseWktGeometry: handles LINESTRING / MULTILINESTRING / invalid', () => {
+      const ls = parseWktGeometry('LINESTRING(1 2, 3 4, 5 6)');
+      expect(ls?.type).toBe('LineString');
+      expect(ls?.coordinates.length).toBe(3);
+
+      const mls = parseWktGeometry('MULTILINESTRING((1 2, 3 4), (5 6, 7 8))');
+      expect(mls?.type).toBe('MultiLineString');
+      if (mls?.type === 'MultiLineString') {
+        expect(mls.coordinates.length).toBe(2);
+      }
+
+      // Single-group MULTILINESTRING is normalised to a plain LineString
+      const single = parseWktGeometry('MULTILINESTRING((1 2, 3 4))');
+      expect(single?.type).toBe('LineString');
+
+      expect(parseWktGeometry('')).toBeNull();
+      expect(parseWktGeometry(undefined)).toBeNull();
+      expect(parseWktGeometry('POINT(1 2)')).toBeNull();
+      expect(parseWktGeometry('garbage')).toBeNull();
     });
   });
 
@@ -232,7 +262,7 @@ describe('MetroService', () => {
       .flush({ Lines: [] });
     httpMock
       .expectOne((r) => r.url.endsWith('/Shape/TRTC'))
-      .flush({ type: 'FeatureCollection', features: [] });
+      .flush([]);
 
     const result = net as unknown as { operatorId: string };
     expect(result.operatorId).toBe('TRTC');

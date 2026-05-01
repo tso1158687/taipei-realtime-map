@@ -1,13 +1,13 @@
 /**
- * Raw response shapes from TDX V3 Metro endpoints.
+ * Raw response shapes from TDX V2 Metro endpoints.
  *
  * Field naming follows the upstream API exactly (PascalCase, English-only
  * keys). These types live behind the service layer; UI code should never
  * import them directly — use the internal `metro.types.ts` shapes instead.
  *
- * The shapes are intentionally narrow (containing only what the app uses).
- * Optional fields are marked `?` so adding new properties does not break
- * existing callers when TDX evolves.
+ * Many V2 endpoints return a bare array (no envelope), but a handful wrap
+ * data in `{ <Key>: [...] }`. The service uses `unwrapEnvelope` to handle
+ * both shapes uniformly.
  */
 
 /** Bilingual label that TDX returns for almost every named entity. */
@@ -16,7 +16,7 @@ export interface TdxLocalizedName {
   readonly En: string;
 }
 
-/** Envelope wrapping `Stations` for `/v2/Rail/Metro/Station/{OperatorID}`. */
+/** `/v2/Rail/Metro/Station/{OperatorID}` → array of stations. */
 export interface TdxMetroStationResponse {
   readonly UpdateTime?: string;
   readonly AuthorityCode?: string;
@@ -36,7 +36,7 @@ export interface TdxMetroStation {
   readonly LocationCity?: string;
 }
 
-/** Envelope for `/v2/Rail/Metro/StationOfLine/{OperatorID}` — maps lines to stations. */
+/** `/v2/Rail/Metro/StationOfLine/{OperatorID}` — maps lines to stations. */
 export interface TdxMetroStationOfLineResponse {
   readonly StationOfLines: readonly TdxMetroStationOfLine[];
 }
@@ -47,47 +47,38 @@ export interface TdxMetroStationOfLine {
   readonly Stations: readonly { readonly StationID: string; readonly Sequence: number }[];
 }
 
-/** Envelope for `/v2/Rail/Metro/Line/{OperatorID}` — line metadata + brand color. */
+/** `/v2/Rail/Metro/Line/{OperatorID}` — line metadata + brand color. */
 export interface TdxMetroLineResponse {
   readonly Lines: readonly TdxMetroLine[];
 }
 
 export interface TdxMetroLine {
+  readonly LineNo?: string;
   readonly LineID: string;
   readonly LineName: TdxLocalizedName;
-  /** Hex color like '#a35e2c'. Some operators omit this. */
+  /** Hex color like '#0a59ae'. Some operators omit this. */
   readonly LineColor?: string;
+  readonly IsBranch?: boolean;
 }
 
 /**
- * `/v2/Rail/Metro/Shape/{OperatorID}?$format=GEOJSON` returns a GeoJSON
- * FeatureCollection. We keep it minimal here.
+ * `/v2/Rail/Metro/Shape/{OperatorID}` returns one record per line. The
+ * geometry is a **WKT** string (LINESTRING / MULTILINESTRING) rather than
+ * GeoJSON; passing `$format=GEOJSON` is silently ignored. We parse the WKT
+ * client-side in `metro.service.ts`.
+ *
+ * `EncodedPolyline` is also returned (Google polyline algorithm) but we do
+ * not use it — WKT is straightforward enough for our scale.
  */
-export interface TdxMetroShapeFeatureCollection {
-  readonly type: 'FeatureCollection';
-  readonly features: readonly TdxMetroShapeFeature[];
+export interface TdxMetroShapeResponse {
+  readonly Shapes: readonly TdxMetroShape[];
 }
 
-export interface TdxMetroShapeFeature {
-  readonly type: 'Feature';
-  readonly geometry:
-    | TdxLineStringGeometry
-    | TdxMultiLineStringGeometry;
-  readonly properties: TdxMetroShapeProperties;
-}
-
-export interface TdxLineStringGeometry {
-  readonly type: 'LineString';
-  readonly coordinates: ReadonlyArray<readonly [number, number]>;
-}
-
-export interface TdxMultiLineStringGeometry {
-  readonly type: 'MultiLineString';
-  readonly coordinates: ReadonlyArray<ReadonlyArray<readonly [number, number]>>;
-}
-
-export interface TdxMetroShapeProperties {
-  readonly LineID?: string;
-  readonly LineName_Zh_tw?: string;
-  readonly LineName_En?: string;
+export interface TdxMetroShape {
+  readonly LineNo?: string;
+  readonly LineID: string;
+  readonly LineName?: TdxLocalizedName;
+  /** WKT geometry: 'LINESTRING(x y, x y, ...)' or 'MULTILINESTRING((...), (...))'. */
+  readonly Geometry: string;
+  readonly EncodedPolyline?: string;
 }

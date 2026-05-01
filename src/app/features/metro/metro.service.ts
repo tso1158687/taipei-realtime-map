@@ -8,8 +8,8 @@ import {
 import type {
   TdxMetroLine,
   TdxMetroLineResponse,
-  TdxMetroShapeFeature,
-  TdxMetroShapeFeatureCollection,
+  TdxMetroShape,
+  TdxMetroShapeResponse,
   TdxMetroStation,
   TdxMetroStationOfLine,
   TdxMetroStationOfLineResponse,
@@ -60,15 +60,14 @@ export class MetroService {
       meta: this.tdx.get<TdxMetroLineResponse | TdxMetroLineResponse['Lines']>(
         `v2/Rail/Metro/Line/${operatorId}`
       ),
-      shapes: this.tdx.get<TdxMetroShapeFeatureCollection>(
-        `v2/Rail/Metro/Shape/${operatorId}`,
-        { $format: 'GEOJSON' }
+      shapes: this.tdx.get<TdxMetroShapeResponse | TdxMetroShapeResponse['Shapes']>(
+        `v2/Rail/Metro/Shape/${operatorId}`
       ),
     }).pipe(
       map(({ meta, shapes }) => {
         const rawMeta = unwrapEnvelope<TdxMetroLine>(meta, 'Lines');
-        const features = shapes?.features ?? [];
-        return mergeLinesAndShapes(rawMeta, features, operatorId);
+        const rawShapes = unwrapEnvelope<TdxMetroShape>(shapes, 'Shapes');
+        return mergeLinesAndShapes(rawMeta, rawShapes, operatorId);
       })
     );
   }
@@ -142,13 +141,19 @@ export function mapStation(
 
 export function mergeLinesAndShapes(
   rawLines: readonly TdxMetroLine[],
-  features: readonly TdxMetroShapeFeature[],
+  rawShapes: readonly TdxMetroShape[],
   operatorId: MetroOperatorId
 ): MetroLine[] {
   const fallbackColor = METRO_OPERATORS[operatorId].color;
-  const shapeByLineId = groupShapesByLineId(features);
+  const shapeByLineId = new Map<string, MetroLineGeometry>();
+  for (const shape of rawShapes) {
+    const geometry = parseWktGeometry(shape.Geometry);
+    if (geometry) shapeByLineId.set(shape.LineID, geometry);
+  }
   return rawLines.map((line) => {
-    const geometry = shapeByLineId.get(line.LineID) ?? { type: 'LineString' as const, coordinates: [] };
+    const geometry =
+      shapeByLineId.get(line.LineID) ??
+      ({ type: 'LineString', coordinates: [] } as MetroLineGeometry);
     return {
       id: `${operatorId}-${line.LineID}`,
       lineId: line.LineID,
@@ -160,32 +165,70 @@ export function mergeLinesAndShapes(
   });
 }
 
-function groupShapesByLineId(
-  features: readonly TdxMetroShapeFeature[]
-): Map<string, MetroLineGeometry> {
-  // Multiple features per line happen when a line has branches — coalesce
-  // into a single MultiLineString so MapLibre renders them in one source.
-  const buckets = new Map<string, [number, number][][]>();
-  for (const f of features) {
-    const id = f.properties?.LineID;
-    if (!id) continue;
-    const list = buckets.get(id) ?? [];
-    if (f.geometry.type === 'LineString') {
-      list.push(f.geometry.coordinates.map((c) => [c[0], c[1]]));
-    } else if (f.geometry.type === 'MultiLineString') {
-      for (const part of f.geometry.coordinates) {
-        list.push(part.map((c) => [c[0], c[1]]));
-      }
-    }
-    buckets.set(id, list);
+/**
+ * Parse a TDX-format WKT string into our internal MetroLineGeometry.
+ *
+ * Supported inputs:
+ *   - `LINESTRING(x y, x y, ...)`
+ *   - `MULTILINESTRING((x y, x y), (x y, x y), ...)`
+ * Whitespace handling is lenient. Returns null on anything else so the
+ * caller can fall back to an empty geometry without crashing.
+ */
+export function parseWktGeometry(
+  wkt: string | undefined | null
+): MetroLineGeometry | null {
+  if (!wkt) return null;
+  const trimmed = wkt.trim();
+  if (/^MULTILINESTRING/i.test(trimmed)) {
+    return parseWktMultiLineString(trimmed);
   }
-  const out = new Map<string, MetroLineGeometry>();
-  for (const [id, lines] of buckets) {
-    if (lines.length === 1) {
-      out.set(id, { type: 'LineString', coordinates: lines[0] });
-    } else if (lines.length > 1) {
-      out.set(id, { type: 'MultiLineString', coordinates: lines });
-    }
+  if (/^LINESTRING/i.test(trimmed)) {
+    return parseWktLineString(trimmed);
+  }
+  return null;
+}
+
+function parseWktLineString(wkt: string): MetroLineGeometry | null {
+  const inner = stripWktHead(wkt, 'LINESTRING');
+  if (inner === null) return null;
+  const coords = parseCoordList(inner);
+  return coords.length >= 2 ? { type: 'LineString', coordinates: coords } : null;
+}
+
+function parseWktMultiLineString(wkt: string): MetroLineGeometry | null {
+  const inner = stripWktHead(wkt, 'MULTILINESTRING');
+  if (inner === null) return null;
+  // Match each "(...)" group inside the outer parentheses.
+  const groups: ReadonlyArray<readonly [number, number]>[] = [];
+  const groupRegex = /\(([^)]+)\)/g;
+  let match: RegExpExecArray | null;
+  while ((match = groupRegex.exec(inner)) !== null) {
+    const coords = parseCoordList(match[1]);
+    if (coords.length >= 2) groups.push(coords);
+  }
+  if (groups.length === 0) return null;
+  if (groups.length === 1) {
+    return { type: 'LineString', coordinates: groups[0] };
+  }
+  return { type: 'MultiLineString', coordinates: groups };
+}
+
+/** Strip e.g. `LINESTRING(...)` → `...`; returns null when the head doesn't match. */
+function stripWktHead(wkt: string, head: string): string | null {
+  const re = new RegExp(`^${head}\\s*\\(([\\s\\S]+)\\)\\s*$`, 'i');
+  const m = re.exec(wkt);
+  return m ? m[1] : null;
+}
+
+function parseCoordList(raw: string): [number, number][] {
+  const out: [number, number][] = [];
+  for (const pair of raw.split(',')) {
+    const parts = pair.trim().split(/\s+/);
+    if (parts.length < 2) continue;
+    const x = Number(parts[0]);
+    const y = Number(parts[1]);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+    out.push([x, y]);
   }
   return out;
 }
