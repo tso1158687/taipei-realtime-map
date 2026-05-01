@@ -15,12 +15,16 @@ import {
   MapMouseEvent,
   Popup,
 } from 'maplibre-gl';
-import { EMPTY, catchError, concatMap, from, mergeMap, of, timer } from 'rxjs';
+import { EMPTY, catchError, concatMap, from, mergeMap, of, tap, timer } from 'rxjs';
 import { I18nService } from '../../core/i18n';
+import { LayerStateService } from '../../core/layer-state';
 import { MapService } from '../../core/map';
 import { METRO_OPERATORS, MetroOperatorId } from '../../core/tdx';
 import { MetroService } from './metro.service';
 import type { MetroLine, MetroNetwork, MetroStation } from './metro.types';
+
+const layerKeyFor = (operatorId: MetroOperatorId): string =>
+  `metro.${operatorId}`;
 
 /**
  * Delay (ms) that MetroLayerComponent waits between operator fetches to
@@ -54,6 +58,7 @@ export class MetroLayerComponent implements OnDestroy {
   private readonly mapService = inject(MapService);
   private readonly metro = inject(MetroService);
   private readonly i18n = inject(I18nService);
+  private readonly layerState = inject(LayerStateService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly rateLimitDelayMs = inject(METRO_RATE_LIMIT_DELAY_MS);
 
@@ -63,37 +68,80 @@ export class MetroLayerComponent implements OnDestroy {
   private loaded = false;
 
   constructor() {
+    // Register operators up-front so the control panel renders something
+    // immediately, even before fetches complete.
+    for (const operatorId of Object.keys(METRO_OPERATORS) as MetroOperatorId[]) {
+      const meta = METRO_OPERATORS[operatorId];
+      this.layerState.register(layerKeyFor(operatorId), {
+        zh: meta.nameZh,
+        en: meta.nameEn,
+      });
+    }
+
     effect(() => {
       if (this.mapService.isReady() && !this.loaded) {
         this.loaded = true;
         this.loadAllOperators();
       }
     });
+
+    // Reactive visibility wiring: when any layer's visibility flips in
+    // LayerStateService (or when the map first becomes ready), push the
+    // change to MapLibre via setLayoutProperty. Both signals are read at
+    // the top of the effect body so dependency tracking is unconditional —
+    // an early return without reading them would unsubscribe the effect.
+    effect(() => {
+      const isReady = this.mapService.isReady();
+      const layers = this.layerState.layers();
+      if (!isReady) return;
+      const map = this.mapService.getMap();
+      for (const layer of layers) {
+        if (!layer.key.startsWith('metro.')) continue;
+        const operatorId = layer.key.slice('metro.'.length) as MetroOperatorId;
+        const visStr = layer.visible ? 'visible' : 'none';
+        for (const layerId of [
+          `metro-lines-layer-${operatorId}`,
+          `metro-stations-layer-${operatorId}`,
+        ]) {
+          if (map.getLayer(layerId)) {
+            map.setLayoutProperty(layerId, 'visibility', visStr);
+          }
+        }
+      }
+    });
   }
 
   private loadAllOperators(): void {
     const operatorIds = Object.keys(METRO_OPERATORS) as MetroOperatorId[];
+    // Mark every operator as 'loading' up-front so the control panel shows
+    // a spinner for queued operators (waiting on rate-limit delay).
+    for (const operatorId of operatorIds) {
+      this.layerState.setStatus(layerKeyFor(operatorId), 'loading');
+    }
 
-    // Sequential per operator: first fires immediately, subsequent operators
-    // wait RATE_LIMIT_DELAY_MS so the previous TDX rate-limit window has
-    // rolled off. Server-side cache means the wait only matters on first
-    // visit — warm cache returns each request instantly without hitting TDX.
     from(operatorIds)
       .pipe(
         concatMap((operatorId, index) => {
-          // First operator fires synchronously; subsequent ones wait for the
-          // rate-limit window. When the delay is 0 (e.g. in tests) we use a
-          // synchronous `of` instead of `timer(0)` so microtask flush via
-          // `whenStable()` is enough to observe the next call.
           const delay =
             index === 0 ? 0 : Math.max(0, this.rateLimitDelayMs);
           const wait$ = delay > 0 ? timer(delay) : of(0);
           return wait$.pipe(
             mergeMap(() => this.metro.fetchNetwork(operatorId)),
-            catchError((err) => {
+            tap((net) => {
+              this.renderNetwork(net);
+              this.layerState.setStatus(layerKeyFor(operatorId), 'loaded');
+            }),
+            catchError((err: unknown) => {
               console.error(
                 `[MetroLayer] failed to load ${operatorId}`,
                 err
+              );
+              const message =
+                err instanceof Error ? err.message : String(err);
+              this.layerState.setStatus(
+                layerKeyFor(operatorId),
+                'error',
+                message
               );
               return EMPTY;
             })
@@ -101,7 +149,7 @@ export class MetroLayerComponent implements OnDestroy {
         }),
         takeUntilDestroyed(this.destroyRef)
       )
-      .subscribe((net) => this.renderNetwork(net));
+      .subscribe();
   }
 
   private renderNetwork(network: MetroNetwork): void {
