@@ -3,7 +3,10 @@ import { TestBed } from '@angular/core/testing';
 import { of } from 'rxjs';
 import { I18nService } from '../../core/i18n';
 import { MapService } from '../../core/map';
-import { MetroLayerComponent } from './metro-layer.component';
+import {
+  METRO_RATE_LIMIT_DELAY_MS,
+  MetroLayerComponent,
+} from './metro-layer.component';
 import { MetroService } from './metro.service';
 import type { MetroNetwork } from './metro.types';
 
@@ -68,6 +71,9 @@ describe('MetroLayerComponent', () => {
         },
         { provide: MetroService, useValue: { fetchNetwork } },
         { provide: I18nService, useValue: { locale: signal('zh-TW').asReadonly() } },
+        // Override the rate-limit delay to 0 in tests so concatMap fires both
+        // operators in the same microtask batch.
+        { provide: METRO_RATE_LIMIT_DELAY_MS, useValue: 0 },
       ],
     });
 
@@ -81,12 +87,15 @@ describe('MetroLayerComponent', () => {
     expect(fetchNetwork).not.toHaveBeenCalled();
   });
 
-  it('fetches both Metro operators (TRTC + TYMC) when map becomes ready', () => {
+  it('fetches both Metro operators (TRTC + TYMC) when map becomes ready', async () => {
     const { isReady, fetchNetwork } = setup();
     const fixture = TestBed.createComponent(MetroLayerComponent);
     fixture.detectChanges();
     isReady.set(true);
     fixture.detectChanges();
+    // With METRO_RATE_LIMIT_DELAY_MS overridden to 0, both operators fire
+    // after a single microtask flush.
+    await fixture.whenStable();
 
     const calls = fetchNetwork.mock.calls.map((c) => c[0]);
     expect(calls).toContain('TRTC');
@@ -94,14 +103,14 @@ describe('MetroLayerComponent', () => {
     expect(calls.length).toBe(2);
   });
 
-  it('adds two sources + two layers per operator (lines + stations)', () => {
+  it('adds two sources + two layers per operator (lines + stations)', async () => {
     const { fakeMap, isReady } = setup();
     const fixture = TestBed.createComponent(MetroLayerComponent);
     fixture.detectChanges();
     isReady.set(true);
     fixture.detectChanges();
+    await fixture.whenStable();
 
-    // 2 operators × (1 line source + 1 station source) = 4
     expect(fakeMap.addSource).toHaveBeenCalledTimes(4);
     expect(fakeMap.addLayer).toHaveBeenCalledTimes(4);
 
@@ -112,12 +121,13 @@ describe('MetroLayerComponent', () => {
     expect(sourceIds).toContain('metro-stations-TYMC');
   });
 
-  it('binds click + cursor handlers on station layers', () => {
+  it('binds click + cursor handlers on station layers', async () => {
     const { fakeMap, isReady } = setup();
     const fixture = TestBed.createComponent(MetroLayerComponent);
     fixture.detectChanges();
     isReady.set(true);
     fixture.detectChanges();
+    await fixture.whenStable();
 
     const events = fakeMap.on.mock.calls.map((c) => `${c[0]}:${c[1]}`);
     expect(events).toContain('click:metro-stations-layer-TRTC');
@@ -125,9 +135,8 @@ describe('MetroLayerComponent', () => {
     expect(events).toContain('mouseleave:metro-stations-layer-TRTC');
   });
 
-  it('does not re-add sources when fetchNetwork resolves twice (idempotent)', () => {
+  it('does not re-add sources when fetchNetwork resolves twice (idempotent)', async () => {
     const { fakeMap, isReady } = setup();
-    // simulate "source already exists" on every getSource call
     let secondPass = false;
     fakeMap.getSource.mockImplementation(() =>
       secondPass ? ({ setData: vi.fn() } as never) : undefined
@@ -137,13 +146,13 @@ describe('MetroLayerComponent', () => {
     fixture.detectChanges();
     isReady.set(true);
     fixture.detectChanges();
+    await fixture.whenStable();
 
     const initialAddSourceCalls = fakeMap.addSource.mock.calls.length;
     expect(initialAddSourceCalls).toBe(4);
 
-    // No second pass actually triggered here; we simulate that subsequent
-    // renderNetwork() invocations would observe an existing source. The
-    // primary point: the *idempotent path* exists in upsertLines/upsertStations.
+    // The *idempotent path* exists in upsertLines/upsertStations: when
+    // getSource returns truthy, the code calls setData rather than addSource.
     secondPass = true;
     expect(fakeMap.addSource.mock.calls.length).toBe(initialAddSourceCalls);
   });

@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
+  InjectionToken,
   OnDestroy,
   effect,
   inject,
@@ -14,11 +15,22 @@ import {
   MapMouseEvent,
   Popup,
 } from 'maplibre-gl';
+import { EMPTY, catchError, concatMap, from, mergeMap, of, timer } from 'rxjs';
 import { I18nService } from '../../core/i18n';
 import { MapService } from '../../core/map';
 import { METRO_OPERATORS, MetroOperatorId } from '../../core/tdx';
 import { MetroService } from './metro.service';
 import type { MetroLine, MetroNetwork, MetroStation } from './metro.types';
+
+/**
+ * Delay (ms) that MetroLayerComponent waits between operator fetches to
+ * stay under TDX free-tier rate limit (~5 requests / 10s observed).
+ * Exposed as an InjectionToken so tests can override it to 0.
+ */
+export const METRO_RATE_LIMIT_DELAY_MS = new InjectionToken<number>(
+  'METRO_RATE_LIMIT_DELAY_MS',
+  { providedIn: 'root', factory: () => 11_000 }
+);
 
 /**
  * Renders Metro static data (lines + stations) onto the shared MapLibre map.
@@ -43,6 +55,7 @@ export class MetroLayerComponent implements OnDestroy {
   private readonly metro = inject(MetroService);
   private readonly i18n = inject(I18nService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly rateLimitDelayMs = inject(METRO_RATE_LIMIT_DELAY_MS);
 
   private readonly addedSources = new Set<string>();
   private readonly addedLayers = new Set<string>();
@@ -60,16 +73,35 @@ export class MetroLayerComponent implements OnDestroy {
 
   private loadAllOperators(): void {
     const operatorIds = Object.keys(METRO_OPERATORS) as MetroOperatorId[];
-    for (const operatorId of operatorIds) {
-      this.metro
-        .fetchNetwork(operatorId)
-        .pipe(takeUntilDestroyed(this.destroyRef))
-        .subscribe({
-          next: (net) => this.renderNetwork(net),
-          error: (err) =>
-            console.error(`[MetroLayer] failed to load ${operatorId}`, err),
-        });
-    }
+
+    // Sequential per operator: first fires immediately, subsequent operators
+    // wait RATE_LIMIT_DELAY_MS so the previous TDX rate-limit window has
+    // rolled off. Server-side cache means the wait only matters on first
+    // visit — warm cache returns each request instantly without hitting TDX.
+    from(operatorIds)
+      .pipe(
+        concatMap((operatorId, index) => {
+          // First operator fires synchronously; subsequent ones wait for the
+          // rate-limit window. When the delay is 0 (e.g. in tests) we use a
+          // synchronous `of` instead of `timer(0)` so microtask flush via
+          // `whenStable()` is enough to observe the next call.
+          const delay =
+            index === 0 ? 0 : Math.max(0, this.rateLimitDelayMs);
+          const wait$ = delay > 0 ? timer(delay) : of(0);
+          return wait$.pipe(
+            mergeMap(() => this.metro.fetchNetwork(operatorId)),
+            catchError((err) => {
+              console.error(
+                `[MetroLayer] failed to load ${operatorId}`,
+                err
+              );
+              return EMPTY;
+            })
+          );
+        }),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe((net) => this.renderNetwork(net));
   }
 
   private renderNetwork(network: MetroNetwork): void {
