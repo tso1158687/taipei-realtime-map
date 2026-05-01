@@ -13,6 +13,7 @@ import { combineLatest } from 'rxjs';
 import { LayerStateService } from '../../core/layer-state';
 import { MapService } from '../../core/map';
 import { METRO_OPERATORS, MetroOperatorId } from '../../core/tdx';
+import { TrackingService } from '../../core/tracking';
 import { MetroRealtimeService } from './metro-realtime.service';
 import { MetroService } from './metro.service';
 import type {
@@ -52,6 +53,7 @@ export class MetroTrainLayerComponent implements OnDestroy {
   private readonly realtime = inject(MetroRealtimeService);
   private readonly layerState = inject(LayerStateService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly tracking = inject(TrackingService);
 
   private readonly zone = inject(NgZone);
   private readonly addedSources = new Set<string>();
@@ -67,6 +69,11 @@ export class MetroTrainLayerComponent implements OnDestroy {
   private rafHandle: number | null = null;
 
   constructor() {
+    // Whenever a tracking target is set, kick off the raf loop so the
+    // camera follows even if no station-to-station transition is active.
+    effect(() => {
+      if (this.tracking.target()) this.ensureRaf();
+    });
     effect(() => {
       const isReady = this.mapService.isReady();
       const layers = this.layerState.layers();
@@ -143,6 +150,21 @@ export class MetroTrainLayerComponent implements OnDestroy {
     });
     this.addedSources.add(sourceId);
     this.addedLayers.add(layerId);
+
+    map.on('click', layerId, (e) => {
+      const f = e.features?.[0];
+      if (!f) return;
+      const trainNumber = (f.properties as Record<string, string>)['trainNumber'];
+      if (trainNumber) {
+        this.tracking.set(`${op}-${trainNumber}`);
+      }
+    });
+    map.on('mouseenter', layerId, () => {
+      map.getCanvas().style.cursor = 'pointer';
+    });
+    map.on('mouseleave', layerId, () => {
+      map.getCanvas().style.cursor = '';
+    });
   }
 
   private updateSource(
@@ -241,6 +263,8 @@ export class MetroTrainLayerComponent implements OnDestroy {
     const map = this.mapService.getMap();
     const now = performance.now();
     let anyActive = false;
+    const trackedId = this.tracking.target()?.id;
+    let trackedPos: [number, number] | null = null;
     for (const [op, opAnims] of this.anims) {
       const features: GeoJSON.Feature[] = [];
       for (const a of opAnims.values()) {
@@ -263,13 +287,21 @@ export class MetroTrainLayerComponent implements OnDestroy {
             destinationEn: a.signal.destinationName?.en ?? '',
           },
         });
+        if (trackedId === `${op}-${a.trainNumber}`) {
+          trackedPos = [lng, lat];
+        }
       }
       const source = map.getSource(`metro-trains-${op}`) as
         | GeoJSONSource
         | undefined;
       source?.setData({ type: 'FeatureCollection', features });
     }
-    // If all transitions completed and no active opAnims, stop the loop.
+    // Smooth-follow camera each frame the tracked train is on screen.
+    if (trackedPos) {
+      anyActive = true;
+      map.easeTo({ center: trackedPos, duration: 200, essential: true });
+    }
+    // If nothing is moving and nothing is being tracked, stop the loop.
     if (!anyActive) {
       if (this.rafHandle !== null) {
         cancelAnimationFrame(this.rafHandle);

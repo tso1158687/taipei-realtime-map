@@ -14,6 +14,7 @@ import {
   ScaleControl,
 } from 'maplibre-gl';
 import { MapService } from '../../core/map';
+import { TrackingService } from '../../core/tracking';
 
 /**
  * Owns the DOM container for MapLibre and drives its lifecycle.
@@ -39,10 +40,18 @@ import { MapService } from '../../core/map';
       }
     `,
   ],
+  host: {
+    '(document:keydown.escape)': 'onEscape()',
+  },
 })
 export class MapShellComponent implements AfterViewInit, OnDestroy {
   private readonly mapService = inject(MapService);
+  private readonly tracking = inject(TrackingService);
   private readonly container = viewChild.required<ElementRef<HTMLDivElement>>('container');
+
+  protected onEscape(): void {
+    this.tracking.clear();
+  }
 
   ngAfterViewInit(): void {
     const map = this.mapService.initialize(this.container().nativeElement);
@@ -62,6 +71,22 @@ export class MapShellComponent implements AfterViewInit, OnDestroy {
       'top-right'
     );
     map.addControl(new ScaleControl({ unit: 'metric', maxWidth: 120 }), 'bottom-left');
+
+    // Click on empty map area cancels tracking. Layer-specific clicks
+    // (e.g. metro train) bubble first so this only fires when nothing is hit.
+    map.on('click', (e) => {
+      const features = map.queryRenderedFeatures(e.point, {
+        layers: this.trackableLayerIds(),
+      });
+      if (features.length === 0) this.tracking.clear();
+    });
+  }
+
+  private trackableLayerIds(): string[] {
+    const map = this.mapService.getMap();
+    return ['metro-trains-layer-TRTC', 'metro-trains-layer-TYMC'].filter(
+      (id) => !!map.getLayer(id)
+    );
   }
 
   ngOnDestroy(): void {
