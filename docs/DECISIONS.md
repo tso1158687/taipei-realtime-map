@@ -151,3 +151,22 @@
   不接受
 - 測試：bus-realtime spec 注入 `REALTIME_WARMUP_DELAY_MS=0` 維持 sync timer
 
+**D-018 — 把 rate limiter 搬到 server side（authoritative gate）**
+- 選：在 `api/_lib/scheduler.ts` 實作 module-level token bucket，
+  `api/tdx.ts` 在 `fetch()` 前 `await acquireUpstreamToken()`；
+  upstream 回 429 時呼叫 `noteUpstream429()` 觸發 10s 全域 cooldown
+- 理由：HAR 顯示 dev mode 下 client-side scheduler 失效 — Vite HMR / 多 tab
+  造成多個 root injector，多個 TdxScheduler 各自 release token，cold-start
+  完美但 realtime 階段 LiveBoard TRTC 短時間內出現兩次（差 0.07s 跟 3s），
+  同一 endpoint 被 hammer 出 429。
+  server-side 是 single Node process per warm instance，module-level state
+  是真正的 single source of truth — 不論幾個 client tab 都被同一個 queue gate
+- 設定：`MIN_INTERVAL_MS=2500`（4 reqs/10s）、`MAX_QUEUE=50`（防 client 失控）、
+  `COOLDOWN_AFTER_429_MS=10000`（撞牆後直接停 10s 不再打 upstream）
+- 替代：(a) Vercel KV / Upstash Redis 跨 instance：要錢、過早優化；
+  (b) 改用 Web Worker 執行 client scheduler 維持 single instance：複雜
+- 副作用：cache hit 仍然走得很快（acquire 在 cache check 之後才執行）；
+  cold-start 第一次 token 立即可用（lastReleaseAt=0）
+- client TdxScheduler 保留：當 frontend 與 backend deploy 不同節奏時還是有用，
+  且 client 端早一點排隊也減少 queue 在 server 堆積
+

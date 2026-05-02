@@ -15,6 +15,7 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getCached, setCached, ttlForPath } from './_lib/cache';
+import { acquireUpstreamToken, noteUpstream429 } from './_lib/scheduler';
 import { getAccessToken, TdxTokenError } from './_lib/tdx-token';
 
 const TDX_BASE = 'https://tdx.transportdata.tw/api/basic/';
@@ -72,6 +73,21 @@ export default async function handler(
     return;
   }
 
+  // Gate every upstream call through the server-side token bucket. Cache
+  // hits already returned above, so this only fires when we're actually
+  // about to talk to TDX. Without this, multiple browser tabs / Vite HMR
+  // reloads can stack up enough concurrent requests to exceed the
+  // upstream 5/10s cap, even when each client is well-behaved.
+  try {
+    await acquireUpstreamToken();
+  } catch (err) {
+    res.status(503).json({
+      error: 'Server-side queue full',
+      message: err instanceof Error ? err.message : 'Unknown error',
+    });
+    return;
+  }
+
   let upstream: Response;
   try {
     upstream = await fetch(upstreamUrl, {
@@ -87,6 +103,14 @@ export default async function handler(
       message: err instanceof Error ? err.message : 'Unknown error',
     });
     return;
+  }
+
+  // If upstream 429s, freeze the whole queue for a cooldown window so we
+  // don't keep hammering and turn a single rejection into a sustained
+  // outage. Subsequent requests still succeed via cache, just not via
+  // fresh upstream calls.
+  if (upstream.status === 429) {
+    noteUpstream429();
   }
 
   res.status(upstream.status);
