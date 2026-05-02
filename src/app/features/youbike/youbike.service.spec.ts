@@ -37,7 +37,7 @@ describe('YouBikeService', () => {
     let result: ReturnType<typeof Object> | undefined;
     service.fetchStations('Taipei').subscribe((s) => (result = s));
     httpMock
-      .expectOne((r) => r.url.endsWith('/v2/Bike/Station/Taipei'))
+      .expectOne((r) => r.url.endsWith('/v2/Bike/Station/City/Taipei'))
       .flush([
         {
           StationUID: 'TPE0001',
