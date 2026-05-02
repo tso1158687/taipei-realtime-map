@@ -49,7 +49,12 @@ export class BusVehicleLayerComponent implements OnDestroy {
 
       for (const city of Object.keys(BUS_CITIES) as BusCityId[]) {
         const layer = layers.find((l) => l.key === layerKeyFor(city));
-        const shouldRun = !!layer && layer.visible && layer.status === 'loaded';
+        // `status !== 'error'` (instead of `=== 'loaded'`) so realtime polling
+        // can subscribe alongside the static fetch. With a 90+ second cold-start
+        // drain, gating on 'loaded' meant LiveBoard / vehicle polls never fired
+        // until *all* static had landed — by which time the user had given up.
+        const shouldRun =
+          !!layer && layer.visible && layer.status !== 'error';
         const isRunning = this.active.has(city);
 
         if (shouldRun && !isRunning) {

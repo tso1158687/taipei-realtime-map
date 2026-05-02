@@ -81,8 +81,12 @@ export class MetroTrainLayerComponent implements OnDestroy {
       const map = this.mapService.getMap();
       for (const op of Object.keys(METRO_OPERATORS) as MetroOperatorId[]) {
         const layer = layers.find((l) => l.key === `metro.${op}`);
+        // `status !== 'error'` (instead of `=== 'loaded'`) so LiveBoard polling
+        // subscribes alongside the static fetch. With a 90+ second cold-start
+        // drain, gating on 'loaded' meant the realtime stream never fired until
+        // *all* static had landed — by which time the user had given up.
         const shouldRun =
-          !!layer && layer.visible && layer.status === 'loaded';
+          !!layer && layer.visible && layer.status !== 'error';
         const isRunning = this.active.has(op);
         if (shouldRun && !isRunning) {
           this.ensureLayer(op);
