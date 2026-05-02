@@ -76,7 +76,7 @@ export class MetroRealtimeService {
   }
 }
 
-function mapSignal(
+export function mapSignal(
   raw: TdxMetroLiveBoard,
   operatorId: MetroOperatorId
 ): MetroTrainSignal {
