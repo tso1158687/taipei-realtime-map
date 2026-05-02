@@ -9,7 +9,7 @@ import {
   MetroLayerComponent,
   MetroTrainLayerComponent,
 } from './features/metro';
-import { RailLayerComponent } from './features/rail';
+import { RailLayerComponent, RailTrainLayerComponent } from './features/rail';
 import { YouBikeLayerComponent } from './features/youbike';
 
 @Component({
@@ -21,6 +21,7 @@ import { YouBikeLayerComponent } from './features/youbike';
     BusLayerComponent,
     BusVehicleLayerComponent,
     RailLayerComponent,
+    RailTrainLayerComponent,
     YouBikeLayerComponent,
     LocaleSwitcherComponent,
     LayerPanelComponent,
@@ -42,6 +43,7 @@ import { YouBikeLayerComponent } from './features/youbike';
       <app-bus-layer />
       <app-bus-vehicle-layer />
       <app-rail-layer />
+      <app-rail-train-layer />
       <app-youbike-layer />
       <app-search-panel />
     }
