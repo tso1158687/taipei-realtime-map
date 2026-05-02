@@ -18,6 +18,7 @@ describe('MetroService', () => {
   let httpMock: HttpTestingController;
 
   beforeEach(() => {
+    localStorage.clear();
     TestBed.configureTestingModule({
       providers: [
         provideHttpClient(),
@@ -29,7 +30,10 @@ describe('MetroService', () => {
     httpMock = TestBed.inject(HttpTestingController);
   });
 
-  afterEach(() => httpMock.verify());
+  afterEach(() => {
+    httpMock.verify();
+    localStorage.clear();
+  });
 
   describe('fetchStations', () => {
     it('GETs Station + StationOfLine and merges line ids per station', () => {

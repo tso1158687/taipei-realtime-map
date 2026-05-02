@@ -16,6 +16,7 @@ describe('BusService', () => {
   let httpMock: HttpTestingController;
 
   beforeEach(() => {
+    localStorage.clear();
     TestBed.configureTestingModule({
       providers: [
         provideHttpClient(),
@@ -27,7 +28,10 @@ describe('BusService', () => {
     httpMock = TestBed.inject(HttpTestingController);
   });
 
-  afterEach(() => httpMock.verify());
+  afterEach(() => {
+    httpMock.verify();
+    localStorage.clear();
+  });
 
   describe('fetchRoutes', () => {
     it('GETs Route + Shape and merges WKT geometry by RouteUID', () => {

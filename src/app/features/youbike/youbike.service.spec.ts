@@ -16,6 +16,7 @@ describe('YouBikeService', () => {
   let httpMock: HttpTestingController;
 
   beforeEach(() => {
+    localStorage.clear();
     TestBed.configureTestingModule({
       providers: [
         provideHttpClient(),
@@ -27,7 +28,10 @@ describe('YouBikeService', () => {
     httpMock = TestBed.inject(HttpTestingController);
   });
 
-  afterEach(() => httpMock.verify());
+  afterEach(() => {
+    httpMock.verify();
+    localStorage.clear();
+  });
 
   it('fetchStations: maps TDX shape to internal YouBikeStation', () => {
     let result: ReturnType<typeof Object> | undefined;

@@ -1,6 +1,7 @@
 import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable, defer, from, mergeMap, retry, timer } from 'rxjs';
+import { Observable, defer, from, mergeMap, of, retry, tap, timer } from 'rxjs';
+import { TdxClientCache } from './client-cache';
 import { TDX_RATE_LIMIT_DELAY_MS } from './rate-limit';
 import { TdxScheduler } from './scheduler';
 
@@ -22,11 +23,19 @@ export type TdxQueryParams = Record<
  *
  * Endpoint paths follow the upstream TDX shape, e.g.
  *   `v3/Rail/Metro/Network/TRTC` → `/api/tdx/v3/Rail/Metro/Network/TRTC`
+ *
+ * Request flow:
+ *   1. Static endpoints first try `TdxClientCache` (localStorage, 24h TTL).
+ *      A hit short-circuits — no scheduler, no http.
+ *   2. Otherwise gate through the global `TdxScheduler` to stay under the
+ *      5 reqs / 10s upstream cap.
+ *   3. On success, static responses are persisted for the next session.
  */
 @Injectable({ providedIn: 'root' })
 export class TdxBaseService {
   private readonly http = inject(HttpClient);
   private readonly scheduler = inject(TdxScheduler);
+  private readonly cache = inject(TdxClientCache);
   private readonly basePath = '/api/tdx';
   private readonly retryDelayMs = inject(TDX_RATE_LIMIT_DELAY_MS);
 
@@ -37,12 +46,22 @@ export class TdxBaseService {
    * @param query Optional query params; null/undefined are dropped.
    *              `$format=JSON` is appended automatically when not present.
    *
-   * On HTTP 429 (rate limit) the request is retried up to 3 times with the
-   * configured delay between attempts. Other errors propagate immediately.
+   * Static endpoints (Station / Route / Shape / Line / StopOfRoute …) are
+   * read-through cached in localStorage for 24h. Realtime endpoints
+   * (LiveBoard / RealTime / Availability / etc.) bypass the cache.
    */
   get<T>(path: string, query: TdxQueryParams = {}): Observable<T> {
     const cleanPath = path.replace(/^\/+/, '');
     const params = this.toHttpParams(query);
+    const cacheable = this.cache.isCacheable(cleanPath);
+    const cacheKey = cacheable ? this.buildCacheKey(cleanPath, params) : null;
+
+    // Cache hit: bypass scheduler AND http entirely.
+    if (cacheKey !== null) {
+      const hit = this.cache.get<T>(cacheKey);
+      if (hit !== null) return of(hit);
+    }
+
     const httpCall = () =>
       this.http.get<T>(`${this.basePath}/${cleanPath}`, { params }).pipe(
         retry({
@@ -53,8 +72,12 @@ export class TdxBaseService {
             }
             throw err;
           },
+        }),
+        tap((data) => {
+          if (cacheKey !== null) this.cache.set(cacheKey, data);
         })
       );
+
     // When the rate-limit delay is 0 (test environment) skip the scheduler
     // entirely so HttpTestingController sees the request synchronously —
     // wrapping in defer + Promise pushes the http.get into a microtask and
@@ -77,5 +100,18 @@ export class TdxBaseService {
       params = params.set(key, String(value));
     }
     return params;
+  }
+
+  /**
+   * Cache key = path + sorted query params. Sorting guarantees that the
+   * same request with parameters in different orders maps to the same
+   * cache entry.
+   */
+  private buildCacheKey(path: string, params: HttpParams): string {
+    const keys = params.keys().slice().sort();
+    const serialized = keys
+      .map((k) => `${k}=${params.get(k) ?? ''}`)
+      .join('&');
+    return `${path}?${serialized}`;
   }
 }

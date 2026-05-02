@@ -12,6 +12,9 @@ describe('TdxBaseService', () => {
   let httpMock: HttpTestingController;
 
   beforeEach(() => {
+    // Clear the persistent client cache so a cached static response from a
+    // previous test doesn't short-circuit a new request that expects http.
+    localStorage.clear();
     TestBed.configureTestingModule({
       providers: [
         provideHttpClient(),
@@ -26,6 +29,7 @@ describe('TdxBaseService', () => {
 
   afterEach(() => {
     httpMock.verify();
+    localStorage.clear();
   });
 
   it('builds the upstream URL under /api/tdx and auto-adds $format=JSON', () => {

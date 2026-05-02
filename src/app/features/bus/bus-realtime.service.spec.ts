@@ -12,6 +12,7 @@ describe('BusRealtimeService', () => {
   let httpMock: HttpTestingController;
 
   beforeEach(() => {
+    localStorage.clear();
     TestBed.configureTestingModule({
       providers: [
         provideHttpClient(),
@@ -23,7 +24,10 @@ describe('BusRealtimeService', () => {
     httpMock = TestBed.inject(HttpTestingController);
   });
 
-  afterEach(() => httpMock.verify());
+  afterEach(() => {
+    httpMock.verify();
+    localStorage.clear();
+  });
 
   it('GETs RealTimeByFrequency on first subscribe and maps vehicles', async () => {
     let received: ReturnType<typeof Object> | undefined;

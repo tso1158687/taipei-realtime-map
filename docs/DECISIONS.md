@@ -104,3 +104,22 @@
 - 同步移除 bus/rail/youbike layer 的 `FEATURE_OFFSET_MULTIPLIER`
   — scheduler 已經在更下層處理，per-feature offset 就是雜訊
 
+**D-014 — 客戶端 localStorage 快取靜態 TDX 資料（24h TTL）**
+- 選：在 `core/tdx/client-cache.ts` 建立 TdxClientCache，
+  TdxBaseService.get 對靜態 endpoint 先讀 cache → hit 直接 `of(cached)` 不打 server，
+  miss 才走 scheduler + http，回應 tap 進 cache
+- 理由：站點 / 路線 / Shape / 月台這種資料一年難得變一次，server 端的 in-memory
+  cache 會在 cold start / `vercel dev` 重啟時消失，造成每次刷新瀏覽器都重新拉一輪。
+  把整個靜態組合搬到瀏覽器 localStorage（24h TTL）後，cold start 那一波只剩
+  realtime endpoint（LiveBoard / RealTime / Availability），輕鬆 fit 在 5 reqs/10s 內
+- 替代：(a) 把 server cache 移到 Vercel KV / Upstash Redis：跨 instance 共享
+  但要錢、要綁服務；(b) IndexedDB：localStorage 5MB 對目前 payload (~1.5 MB) 夠用
+- realtime 過濾用正則：LiveBoard / RealTime / Availability / EstimatedTimeOfArrival
+  / TrainLiveBoard / RTNT / PlateInfo（與 server 端 cache 一致）
+- bug 修：原 `/RealTime\b/` 對 `RealTimeByFrequency` 不會 match（`\b` 要求邊界，
+  但後面接 `B` 是 word char）→ 改成 `/RealTime/`，server-side cache 一併修
+- 版本前綴 `tdx-cache-v1:` 方便未來資料 schema 改變時 bump 失效
+- QuotaExceeded 自動 fallback：先嘗試清空自家前綴重試一次，再不行就 silent no-op
+- 測試 trade-off：localStorage 跨 test 殘留 → 5 個 service spec 加 `localStorage.clear()`
+  在 beforeEach / afterEach；新增 `client-cache.spec.ts`（7 tests）
+

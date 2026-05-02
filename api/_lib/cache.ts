@@ -55,7 +55,10 @@ const STATIC_TTL_MS = 60 * 60 * 1000; // 1 hour
 const REALTIME_PATH_PATTERNS: readonly RegExp[] = [
   /\/LiveBoard\b/i,
   /\/TrainLiveBoard\b/i,
-  /\/RealTime\b/i,
+  // No trailing \b — actual paths look like `RealTimeByFrequency` /
+  // `RealTimeNearStop`, where the next char is a word char so a word
+  // boundary would never match.
+  /\/RealTime/i,
   /\/RTNT\b/i,
   /\/PlateInfo\b/i,
   /\/EstimatedTimeOfArrival\b/i,
