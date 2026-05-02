@@ -10,6 +10,7 @@ import {
 } from 'rxjs';
 import {
   type MetroOperatorId,
+  REALTIME_WARMUP_DELAY_MS,
   TdxBaseService,
   unwrapEnvelope,
 } from '../../core/tdx';
@@ -26,6 +27,7 @@ import type { MetroTrainSignal } from './metro.types';
 @Injectable({ providedIn: 'root' })
 export class MetroRealtimeService {
   private readonly tdx = inject(TdxBaseService);
+  private readonly warmupDelayMs = inject(REALTIME_WARMUP_DELAY_MS);
 
   static readonly POLL_INTERVAL_MS = 15_000;
 
@@ -39,7 +41,7 @@ export class MetroRealtimeService {
   ): Observable<readonly MetroTrainSignal[]> {
     let stream = this.streams.get(operatorId);
     if (!stream) {
-      stream = timer(0, MetroRealtimeService.POLL_INTERVAL_MS).pipe(
+      stream = timer(this.warmupDelayMs, MetroRealtimeService.POLL_INTERVAL_MS).pipe(
         switchMap(() =>
           this.tdx
             .get<unknown>(`v2/Rail/Metro/LiveBoard/${operatorId}`)

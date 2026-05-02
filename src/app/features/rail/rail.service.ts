@@ -12,6 +12,7 @@ import {
 import { parseWktGeometry, type LineGeometry } from '../../core/geometry';
 import {
   RAIL_OPERATORS,
+  REALTIME_WARMUP_DELAY_MS,
   TdxBaseService,
   unwrapEnvelope,
 } from '../../core/tdx';
@@ -43,18 +44,20 @@ const EMPTY_GEOMETRY: LineGeometry = { type: 'LineString', coordinates: [] };
 @Injectable({ providedIn: 'root' })
 export class RailService {
   private readonly tdx = inject(TdxBaseService);
+  private readonly warmupDelayMs = inject(REALTIME_WARMUP_DELAY_MS);
 
   static readonly LIVEBOARD_POLL_MS = 30_000;
 
   private traLiveStream: Observable<readonly TraTrainLive[]> | null = null;
 
   fetchNetwork(mode: RailMode): Observable<RailNetwork> {
-    const stations$ = this.tdx
-      .get<unknown>(`v2/Rail/${mode}/Station`)
-      .pipe(
-        map((p) => unwrapEnvelope<TdxRailStation>(p, 'Stations')),
-        map((arr) => arr.map((s) => mapStation(s, mode)))
-      );
+    // Stations: tolerate failure → empty list rather than blanking the whole
+    // network. Cache will fill the gap on the next reload.
+    const stations$ = this.tdx.get<unknown>(`v2/Rail/${mode}/Station`).pipe(
+      catchError(() => of([])),
+      map((p) => unwrapEnvelope<TdxRailStation>(p, 'Stations')),
+      map((arr) => arr.map((s) => mapStation(s, mode)))
+    );
     const lines$ = this.fetchLines(mode);
     return forkJoin({ stations: stations$, lines: lines$ }).pipe(
       map(({ stations, lines }) => ({ mode, stations, lines }))
@@ -66,13 +69,16 @@ export class RailService {
       mode === 'TRA'
         ? this.tdx
             .get<unknown>('v2/Rail/TRA/Line')
-            .pipe(map((p) => unwrapEnvelope<TdxTraLine>(p, 'Lines')))
+            .pipe(
+              catchError(() => of([])),
+              map((p) => unwrapEnvelope<TdxTraLine>(p, 'Lines'))
+            )
         : of<TdxTraLine[]>([]); // THSR doesn't have a Line endpoint with same shape
     const shapes$ = this.tdx
       .get<unknown>(`v2/Rail/${mode}/Shape`)
       .pipe(
-        map((p) => unwrapEnvelope<TdxRailShape>(p, 'Shapes')),
-        catchError(() => of<TdxRailShape[]>([]))
+        catchError(() => of([])),
+        map((p) => unwrapEnvelope<TdxRailShape>(p, 'Shapes'))
       );
     return forkJoin({ meta: meta$, shapes: shapes$ }).pipe(
       map(({ meta, shapes }) => mergeLinesAndShapes(meta, shapes, mode))
@@ -82,7 +88,7 @@ export class RailService {
   /** TRA TrainLiveBoard polled every 30 s. THSR not supported — empty stream. */
   watchTraLiveBoard(): Observable<readonly TraTrainLive[]> {
     if (!this.traLiveStream) {
-      this.traLiveStream = timer(0, RailService.LIVEBOARD_POLL_MS).pipe(
+      this.traLiveStream = timer(this.warmupDelayMs, RailService.LIVEBOARD_POLL_MS).pipe(
         switchMap(() =>
           this.tdx.get<unknown>('v2/Rail/TRA/TrainLiveBoard').pipe(
             catchError((err: unknown) => {

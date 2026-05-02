@@ -10,6 +10,7 @@ import {
 } from 'rxjs';
 import {
   type BusCityId,
+  REALTIME_WARMUP_DELAY_MS,
   TdxBaseService,
   unwrapEnvelope,
 } from '../../core/tdx';
@@ -28,6 +29,7 @@ import type { YouBikeAvailability, YouBikeStation } from './youbike.types';
 @Injectable({ providedIn: 'root' })
 export class YouBikeService {
   private readonly tdx = inject(TdxBaseService);
+  private readonly warmupDelayMs = inject(REALTIME_WARMUP_DELAY_MS);
 
   static readonly POLL_INTERVAL_MS = 30_000;
 
@@ -53,7 +55,7 @@ export class YouBikeService {
   ): Observable<readonly YouBikeAvailability[]> {
     let stream = this.availabilityStreams.get(city);
     if (!stream) {
-      stream = timer(0, YouBikeService.POLL_INTERVAL_MS).pipe(
+      stream = timer(this.warmupDelayMs, YouBikeService.POLL_INTERVAL_MS).pipe(
         switchMap(() =>
           this.tdx.get<unknown>(`v2/Bike/Availability/City/${city}`).pipe(
             catchError((err: unknown) => {

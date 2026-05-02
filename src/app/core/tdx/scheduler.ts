@@ -18,13 +18,16 @@ import { TDX_RATE_LIMIT_DELAY_MS } from './rate-limit';
  * cache) but those return in <50ms so the throttle is still cheap.
  *
  * The token interval is derived from the rate-limit delay (11s default)
- * divided by 4 → ~2.75s per token → ~3.6 reqs / 10s. Tests inject
- * `TDX_RATE_LIMIT_DELAY_MS=0` and get an effectively unthrottled scheduler.
+ * divided by 3 → ~3.67s per token → ~2.7 reqs / 10s. The earlier /4 setting
+ * still occasionally tripped 429 on cold-start because TDX appears to use a
+ * sliding window (not a strict 10-second bucket), so we keep more headroom.
+ * Tests inject `TDX_RATE_LIMIT_DELAY_MS=0` and get an effectively
+ * unthrottled scheduler.
  */
 @Injectable({ providedIn: 'root' })
 export class TdxScheduler {
   private readonly minDelayMs = inject(TDX_RATE_LIMIT_DELAY_MS);
-  private readonly intervalMs = Math.max(0, Math.floor(this.minDelayMs / 4));
+  private readonly intervalMs = Math.max(0, Math.floor(this.minDelayMs / 3));
   private readonly waiters = new Subject<() => void>();
 
   constructor() {

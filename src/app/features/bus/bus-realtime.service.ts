@@ -10,6 +10,7 @@ import {
 } from 'rxjs';
 import {
   type BusCityId,
+  REALTIME_WARMUP_DELAY_MS,
   TdxBaseService,
   unwrapEnvelope,
 } from '../../core/tdx';
@@ -31,6 +32,7 @@ import type { BusVehicle } from './bus.types';
 @Injectable({ providedIn: 'root' })
 export class BusRealtimeService {
   private readonly tdx = inject(TdxBaseService);
+  private readonly warmupDelayMs = inject(REALTIME_WARMUP_DELAY_MS);
 
   /** Default poll cadence for A1 vehicle positions. */
   static readonly POLL_INTERVAL_MS = 20_000;
@@ -40,7 +42,7 @@ export class BusRealtimeService {
   watchVehicles(city: BusCityId): Observable<BusVehicle[]> {
     let stream = this.streams.get(city);
     if (!stream) {
-      stream = timer(0, BusRealtimeService.POLL_INTERVAL_MS).pipe(
+      stream = timer(this.warmupDelayMs, BusRealtimeService.POLL_INTERVAL_MS).pipe(
         switchMap(() =>
           this.tdx
             .get<unknown>(`v2/Bus/RealTimeByFrequency/City/${city}`)

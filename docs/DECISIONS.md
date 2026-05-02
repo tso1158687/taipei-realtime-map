@@ -123,3 +123,31 @@
 - 測試 trade-off：localStorage 跨 test 殘留 → 5 個 service spec 加 `localStorage.clear()`
   在 beforeEach / afterEach；新增 `client-cache.spec.ts`（7 tests）
 
+**D-015 — partial fetch resilience：forkJoin 內部每個 request 自己 catchError**
+- 選：metro / bus / rail 的 fetchNetwork 在每個 inner `tdx.get()` 後加
+  `catchError(() => of([]))`，讓單一 endpoint 失敗（多半是 429）不會炸整層
+- 理由：之前 forkJoin 是 all-or-nothing，TYMC 任一 endpoint 429 → 整個業者的
+  Station + Line 都不渲染。改成 partial 後最壞情況是 line geometry 空（站點仍出），
+  下次刷新 cache hit 補回缺的部分
+- 替代：(a) layer-level retry：30s 後再打一次；複雜度較高；(b) 不修，靠 retry
+  自然恢復；UX 不接受
+- trade-off：partial 資料可能誤導 user（看到站點但沒線），用 layer-state 的
+  'error' status 表現
+
+**D-016 — scheduler interval 從 /4 放寬到 /3（~3.67s/req）**
+- 選：`Math.floor(minDelayMs / 3)` ≈ 3667ms → ~2.7 reqs / 10s
+- 理由：/4 = 2.75s 偶爾還是撞 429，多半是 TDX 用 sliding window 而非 strict
+  10s bucket。多留 30% headroom 換穩定
+- trade-off：cold-start drain 變慢（25 req × 3.7s ≈ 90s vs. 之前 70s），
+  但配合 client cache 第二次起根本不會 cold-start 全部，所以實質不影響
+
+**D-017 — 即時串流 cold-start 延遲 15s**
+- 選：新增 `REALTIME_WARMUP_DELAY_MS` injection token (default 15s)，
+  metro/bus/rail/youbike 4 個 polling timer 從 `timer(0, ...)` 改 `timer(15s, ...)`
+- 理由：cold-start 已經有 ~25 個靜態 request 在排隊，realtime polling timer
+  立刻 fire 會搶 token、拖慢靜態 drain、可能觸發 429。延遲 15s 讓靜態先抽 5 個
+  token 再開始 realtime。UX 上 user 也習慣先看到站點再看到車輛
+- 替代：(a) 等所有靜態 fetch 完才啟動 realtime；要全域協調，複雜；(b) 不延遲；
+  不接受
+- 測試：bus-realtime spec 注入 `REALTIME_WARMUP_DELAY_MS=0` 維持 sync timer
+

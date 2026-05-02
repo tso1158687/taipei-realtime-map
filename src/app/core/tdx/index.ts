@@ -4,6 +4,7 @@ export { unwrapEnvelope } from './envelope';
 export {
   TDX_RATE_LIMIT_DELAY_MS,
   TDX_RATE_LIMIT_DELAY_MS_DEFAULT,
+  REALTIME_WARMUP_DELAY_MS,
 } from './rate-limit';
 export { TdxScheduler } from './scheduler';
 export { TdxClientCache } from './client-cache';

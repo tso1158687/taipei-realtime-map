@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { Observable, forkJoin, map } from 'rxjs';
+import { Observable, catchError, forkJoin, map, of } from 'rxjs';
 import { parseWktGeometry } from '../../core/geometry';
 import {
   METRO_OPERATORS,
@@ -37,13 +37,21 @@ export class MetroService {
   private readonly tdx = inject(TdxBaseService);
 
   fetchStations(operatorId: MetroOperatorId): Observable<MetroStation[]> {
+    // Each inner fetch is wrapped in `catchError → []` so a 429 on one
+    // endpoint doesn't take out the entire operator. Worst case StationOfLine
+    // is empty → stations render but without their line associations, which
+    // is much better UX than blanking the whole network.
     return forkJoin({
-      stations: this.tdx.get<TdxMetroStationResponse | TdxMetroStationResponse['Stations']>(
-        `v2/Rail/Metro/Station/${operatorId}`
-      ),
-      stationOfLine: this.tdx.get<
-        TdxMetroStationOfLineResponse | TdxMetroStationOfLineResponse['StationOfLines']
-      >(`v2/Rail/Metro/StationOfLine/${operatorId}`),
+      stations: this.tdx
+        .get<TdxMetroStationResponse | TdxMetroStationResponse['Stations']>(
+          `v2/Rail/Metro/Station/${operatorId}`
+        )
+        .pipe(catchError(() => of([]))),
+      stationOfLine: this.tdx
+        .get<
+          TdxMetroStationOfLineResponse | TdxMetroStationOfLineResponse['StationOfLines']
+        >(`v2/Rail/Metro/StationOfLine/${operatorId}`)
+        .pipe(catchError(() => of([]))),
     }).pipe(
       map(({ stations, stationOfLine }) => {
         const rawStations = unwrapEnvelope<TdxMetroStation>(stations, 'Stations');
@@ -59,12 +67,16 @@ export class MetroService {
 
   fetchLines(operatorId: MetroOperatorId): Observable<MetroLine[]> {
     return forkJoin({
-      meta: this.tdx.get<TdxMetroLineResponse | TdxMetroLineResponse['Lines']>(
-        `v2/Rail/Metro/Line/${operatorId}`
-      ),
-      shapes: this.tdx.get<TdxMetroShapeResponse | TdxMetroShapeResponse['Shapes']>(
-        `v2/Rail/Metro/Shape/${operatorId}`
-      ),
+      meta: this.tdx
+        .get<TdxMetroLineResponse | TdxMetroLineResponse['Lines']>(
+          `v2/Rail/Metro/Line/${operatorId}`
+        )
+        .pipe(catchError(() => of([]))),
+      shapes: this.tdx
+        .get<TdxMetroShapeResponse | TdxMetroShapeResponse['Shapes']>(
+          `v2/Rail/Metro/Shape/${operatorId}`
+        )
+        .pipe(catchError(() => of([]))),
     }).pipe(
       map(({ meta, shapes }) => {
         const rawMeta = unwrapEnvelope<TdxMetroLine>(meta, 'Lines');

@@ -4,7 +4,10 @@ import {
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { TDX_RATE_LIMIT_DELAY_MS } from '../../core/tdx';
+import {
+  REALTIME_WARMUP_DELAY_MS,
+  TDX_RATE_LIMIT_DELAY_MS,
+} from '../../core/tdx';
 import { BusRealtimeService, mapVehicle } from './bus-realtime.service';
 
 describe('BusRealtimeService', () => {
@@ -18,6 +21,7 @@ describe('BusRealtimeService', () => {
         provideHttpClient(),
         provideHttpClientTesting(),
         { provide: TDX_RATE_LIMIT_DELAY_MS, useValue: 0 },
+        { provide: REALTIME_WARMUP_DELAY_MS, useValue: 0 },
       ],
     });
     service = TestBed.inject(BusRealtimeService);

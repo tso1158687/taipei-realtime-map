@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { Observable, forkJoin, map } from 'rxjs';
+import { Observable, catchError, forkJoin, map, of } from 'rxjs';
 import { parseWktGeometry, type LineGeometry } from '../../core/geometry';
 import {
   BUS_CITIES,
@@ -31,9 +31,16 @@ export class BusService {
   private readonly tdx = inject(TdxBaseService);
 
   fetchRoutes(city: BusCityId): Observable<BusRoute[]> {
+    // Each inner fetch survives partial failure (e.g. 429 on Shape) so a
+    // single 429 doesn't drop the whole city — routes still render with
+    // empty geometry, which is recoverable next reload from cache.
     return forkJoin({
-      routes: this.tdx.get<unknown>(`v2/Bus/Route/City/${city}`),
-      shapes: this.tdx.get<unknown>(`v2/Bus/Shape/City/${city}`),
+      routes: this.tdx
+        .get<unknown>(`v2/Bus/Route/City/${city}`)
+        .pipe(catchError(() => of([]))),
+      shapes: this.tdx
+        .get<unknown>(`v2/Bus/Shape/City/${city}`)
+        .pipe(catchError(() => of([]))),
     }).pipe(
       map(({ routes, shapes }) => {
         const rawRoutes = unwrapEnvelope<TdxBusRoute>(routes, 'BusRoutes');
@@ -47,6 +54,7 @@ export class BusService {
     return this.tdx
       .get<unknown>(`v2/Bus/StopOfRoute/City/${city}`)
       .pipe(
+        catchError(() => of([])),
         map((payload) => {
           const raw = unwrapEnvelope<TdxBusStopOfRoute>(
             payload,
