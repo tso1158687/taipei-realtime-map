@@ -60,8 +60,12 @@ export class MetroRealtimeService {
             payload,
             'LiveBoards'
           );
+          // TDX V2 LiveBoard rows do NOT carry TrainNumber — each row is a
+          // per-station "next train approaching" signal. Rows we can render
+          // are the ones with at least StationID + LineID; mapSignal
+          // synthesises a stable id from (LineID, StationID, TripHeadSign).
           return raw
-            .filter((r) => r.TrainNumber)
+            .filter((r) => r.StationID && r.LineID)
             .map((r) => mapSignal(r, operatorId));
         }),
         shareReplay({ bufferSize: 1, refCount: true })
@@ -76,8 +80,16 @@ function mapSignal(
   raw: TdxMetroLiveBoard,
   operatorId: MetroOperatorId
 ): MetroTrainSignal {
+  // Synthetic stable id: (Line, Station, TripHeadSign) is enough to keep
+  // markers "sticky" between polls — if the same train is still approaching
+  // the same station, the id matches and the marker stays put. When the
+  // train moves to the next station the previous row falls off and a new
+  // row at the next station appears, giving a hopping animation effect.
+  const trainNumber =
+    raw.TrainNumber ??
+    `${raw.LineID ?? '?'}-${raw.StationID}-${raw.TripHeadSign ?? raw.DestinationStationID ?? ''}`;
   return {
-    trainNumber: raw.TrainNumber!,
+    trainNumber,
     operatorId,
     stationId: raw.StationID,
     lineId: raw.LineID,

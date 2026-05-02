@@ -33,6 +33,14 @@ export class TdxClientCache {
   private readonly STATIC_TTL_MS = 24 * 60 * 60 * 1000;
 
   /**
+   * Per-entry size cap. Bus StopOfRoute can hit 2 MB per city; trying to
+   * fit 4 of them × 2 MB into a 5 MB localStorage budget triggers quota
+   * cascades. We skip oversized entries entirely on the client and let
+   * them fall back to the server cache (1 h TTL there).
+   */
+  private readonly MAX_ENTRY_BYTES = 1_000_000;
+
+  /**
    * Endpoints that change frequently (real-time vehicle positions, ETAs,
    * availability counts). We always go to network for these — caching even
    * for a few seconds creates very confusing UX (a YouBike station shows
@@ -85,9 +93,17 @@ export class TdxClientCache {
   }
 
   /**
-   * Persist an entry with a 24h TTL. Silently no-ops on quota exceeded —
-   * worst case the next request re-hits the network, which is exactly the
-   * pre-cache behaviour, so no user-visible regression.
+   * Persist an entry with a 24h TTL.
+   *
+   * Two safety rails:
+   *   1. **Skip oversized entries**: Bus StopOfRoute is 2 MB+ per city.
+   *      Trying to keep 4 of those evicts everything else. Dropping it
+   *      client-side is fine — server has it cached for an hour.
+   *   2. **Never clear-and-retry on quota**: the previous implementation
+   *      called `clear()` (wipes every cached entry under our prefix) and
+   *      re-tried, so a single oversized write would erase 20 small ones
+   *      we already had. Now we just no-op the failing write and leave
+   *      existing entries intact.
    */
   set<T>(key: string, data: T): void {
     const storage = this.storage;
@@ -96,17 +112,11 @@ export class TdxClientCache {
       data,
       expiresAt: Date.now() + this.STATIC_TTL_MS,
     });
+    if (entry.length > this.MAX_ENTRY_BYTES) return;
     try {
       storage.setItem(this.STORAGE_PREFIX + key, entry);
     } catch {
-      // QuotaExceededError or storage disabled. Try once to make room by
-      // dropping every key under our prefix; if that still fails, give up.
-      try {
-        this.clear();
-        storage.setItem(this.STORAGE_PREFIX + key, entry);
-      } catch {
-        /* permanent — no-op */
-      }
+      /* Quota exceeded or storage disabled — skip silently, do NOT clear. */
     }
   }
 
