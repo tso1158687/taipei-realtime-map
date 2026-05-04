@@ -70,22 +70,38 @@ export class BusLayerComponent implements OnDestroy {
   private readonly addedSources = new Set<string>();
   private readonly addedLayers = new Set<string>();
   private popup: Popup | null = null;
-  private loaded = false;
+  /** Cities that have been (or are being) fetched. Lazy-load: don't pay
+   *  the network cost for cities the user never enables. */
+  private readonly loadedCities = new Set<BusCityId>();
 
   constructor() {
     for (const city of Object.keys(BUS_CITIES) as BusCityId[]) {
       const meta = BUS_CITIES[city];
-      this.layerState.register(layerKeyFor(city), {
-        zh: `${meta.nameZh}公車`,
-        en: `${meta.nameEn} Bus`,
-      });
+      this.layerState.register(
+        layerKeyFor(city),
+        { zh: `${meta.nameZh}公車`, en: `${meta.nameEn} Bus` },
+        // Bus is OFF by default to keep cold-start request count low —
+        // user opts in per city via the layer panel. localStorage
+        // remembers the choice across sessions.
+        { initialVisible: false }
+      );
     }
 
+    // Lazy fetch: when a city's layer flips visible AND we haven't
+    // fetched it yet, fire fetchNetwork. Other cities stay quiet.
     effect(() => {
-      if (this.mapService.isReady() && !this.loaded) {
-        this.loaded = true;
-        this.loadAllCities();
+      if (!this.mapService.isReady()) return;
+      const layers = this.layerState.layers();
+      const newlyVisible: BusCityId[] = [];
+      for (const layer of layers) {
+        if (!layer.key.startsWith('bus.')) continue;
+        const city = layer.key.slice('bus.'.length) as BusCityId;
+        if (layer.visible && !this.loadedCities.has(city)) {
+          this.loadedCities.add(city);
+          newlyVisible.push(city);
+        }
       }
+      if (newlyVisible.length > 0) this.loadCities(newlyVisible);
     });
 
     effect(() => {
@@ -109,8 +125,7 @@ export class BusLayerComponent implements OnDestroy {
     });
   }
 
-  private loadAllCities(): void {
-    const cities = Object.keys(BUS_CITIES) as BusCityId[];
+  private loadCities(cities: readonly BusCityId[]): void {
     for (const city of cities) {
       this.layerState.setStatus(layerKeyFor(city), 'loading');
     }

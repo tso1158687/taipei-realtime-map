@@ -61,7 +61,9 @@ export class YouBikeLayerComponent implements OnDestroy {
   private readonly addedLayers = new Set<string>();
   private readonly stationsByCity = new Map<BusCityId, YouBikeStation[]>();
   private popup: Popup | null = null;
-  private loaded = false;
+  /** Cities that have been (or are being) fetched. Lazy: don't pay
+   *  the network cost for cities the user never enables. */
+  private readonly loadedCities = new Set<BusCityId>();
 
   /**
    * YouBike data via TDX is only published for Taipei + NewTaipei. Taoyuan
@@ -76,17 +78,30 @@ export class YouBikeLayerComponent implements OnDestroy {
   constructor() {
     for (const city of YouBikeLayerComponent.SUPPORTED_CITIES) {
       const meta = BUS_CITIES[city];
-      this.layerState.register(layerKeyFor(city), {
-        zh: `${meta.nameZh} YouBike`,
-        en: `${meta.nameEn} YouBike`,
-      });
+      this.layerState.register(
+        layerKeyFor(city),
+        { zh: `${meta.nameZh} YouBike`, en: `${meta.nameEn} YouBike` },
+        // YouBike is OFF by default; user opts in per city via the
+        // layer panel. localStorage remembers the choice.
+        { initialVisible: false }
+      );
     }
 
+    // Lazy fetch: only hit TDX when the user actually toggles a city on.
     effect(() => {
-      if (this.mapService.isReady() && !this.loaded) {
-        this.loaded = true;
-        this.loadAllCities();
+      if (!this.mapService.isReady()) return;
+      const layers = this.layerState.layers();
+      const newlyVisible: BusCityId[] = [];
+      for (const layer of layers) {
+        if (!layer.key.startsWith('youbike.')) continue;
+        const city = layer.key.slice('youbike.'.length) as BusCityId;
+        if (!YouBikeLayerComponent.SUPPORTED_CITIES.includes(city)) continue;
+        if (layer.visible && !this.loadedCities.has(city)) {
+          this.loadedCities.add(city);
+          newlyVisible.push(city);
+        }
       }
+      if (newlyVisible.length > 0) this.loadCities(newlyVisible);
     });
 
     effect(() => {
@@ -107,8 +122,7 @@ export class YouBikeLayerComponent implements OnDestroy {
     });
   }
 
-  private loadAllCities(): void {
-    const cities = YouBikeLayerComponent.SUPPORTED_CITIES;
+  private loadCities(cities: readonly BusCityId[]): void {
     for (const city of cities) {
       this.layerState.setStatus(layerKeyFor(city), 'loading');
     }

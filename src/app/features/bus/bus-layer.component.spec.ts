@@ -2,11 +2,23 @@ import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { of } from 'rxjs';
 import { I18nService } from '../../core/i18n';
+import { LayerStateService } from '../../core/layer-state';
 import { MapService } from '../../core/map';
-import { TDX_RATE_LIMIT_DELAY_MS } from '../../core/tdx';
+import { BUS_CITIES, BusCityId, TDX_RATE_LIMIT_DELAY_MS } from '../../core/tdx';
 import { BusLayerComponent } from './bus-layer.component';
 import { BusService } from './bus.service';
 import type { BusNetwork } from './bus.types';
+
+/**
+ * Bus layers default to invisible (lazy load: don't pay network cost for
+ * cities the user never enables). To exercise the eager-fetch test paths
+ * we toggle them on after creating the component.
+ */
+function enableAllBusCities(layerState: LayerStateService): void {
+  for (const city of Object.keys(BUS_CITIES) as BusCityId[]) {
+    layerState.setVisibility(`bus.${city}`, true);
+  }
+}
 
 describe('BusLayerComponent', () => {
   function createFakeMap() {
@@ -87,11 +99,23 @@ describe('BusLayerComponent', () => {
     expect(fetchNetwork).not.toHaveBeenCalled();
   });
 
-  it('fetches all 4 cities (Taipei, NewTaipei, Taoyuan, Keelung) on map ready', async () => {
+  it('does not fetch any city by default — bus layers are off until user toggles them', async () => {
     const { isReady, fetchNetwork } = setup();
     const fixture = TestBed.createComponent(BusLayerComponent);
     fixture.detectChanges();
     isReady.set(true);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(fetchNetwork).not.toHaveBeenCalled();
+  });
+
+  it('fetches all 4 cities once user toggles them on', async () => {
+    const { isReady, fetchNetwork } = setup();
+    const fixture = TestBed.createComponent(BusLayerComponent);
+    fixture.detectChanges();
+    isReady.set(true);
+    fixture.detectChanges();
+    enableAllBusCities(TestBed.inject(LayerStateService));
     fixture.detectChanges();
     await fixture.whenStable();
 
@@ -103,11 +127,13 @@ describe('BusLayerComponent', () => {
     expect(calls.length).toBe(4);
   });
 
-  it('adds 2 sources + 2 layers per city = 8 total', async () => {
+  it('adds 2 sources + 2 layers per enabled city = 8 total', async () => {
     const { fakeMap, isReady } = setup();
     const fixture = TestBed.createComponent(BusLayerComponent);
     fixture.detectChanges();
     isReady.set(true);
+    fixture.detectChanges();
+    enableAllBusCities(TestBed.inject(LayerStateService));
     fixture.detectChanges();
     await fixture.whenStable();
 
@@ -125,6 +151,8 @@ describe('BusLayerComponent', () => {
     const fixture = TestBed.createComponent(BusLayerComponent);
     fixture.detectChanges();
     isReady.set(true);
+    fixture.detectChanges();
+    enableAllBusCities(TestBed.inject(LayerStateService));
     fixture.detectChanges();
     await fixture.whenStable();
 
@@ -144,6 +172,8 @@ describe('BusLayerComponent', () => {
     const fixture = TestBed.createComponent(BusLayerComponent);
     fixture.detectChanges();
     isReady.set(true);
+    fixture.detectChanges();
+    enableAllBusCities(TestBed.inject(LayerStateService));
     fixture.detectChanges();
     await fixture.whenStable();
 
