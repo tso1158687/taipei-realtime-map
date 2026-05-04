@@ -30,6 +30,28 @@ export default async function handler(
   req: VercelRequest,
   res: VercelResponse
 ): Promise<void> {
+  // Outermost catch-all so an unhandled exception returns a JSON body with
+  // the error name + message instead of Vercel's generic
+  //   {code: "500", message: "A server error has occurred"}
+  // which is opaque and prevents diagnosis from the client side.
+  try {
+    await handleInner(req, res);
+  } catch (err) {
+    if (!res.writableEnded) {
+      res.status(500).json({
+        error: 'Unhandled exception in TDX proxy handler',
+        name: err instanceof Error ? err.name : 'Unknown',
+        message: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack?.split('\n').slice(0, 5) : undefined,
+      });
+    }
+  }
+}
+
+async function handleInner(
+  req: VercelRequest,
+  res: VercelResponse
+): Promise<void> {
   if (req.method !== 'GET') {
     res.status(405).json({ error: 'Only GET is supported by this proxy' });
     return;

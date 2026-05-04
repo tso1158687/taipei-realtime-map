@@ -32,6 +32,19 @@ const MIN_INTERVAL_MS = 2500;
 const MAX_QUEUE = 50;
 const COOLDOWN_AFTER_429_MS = 10_000;
 
+/**
+ * In serverless production each invocation is isolated — module-level
+ * state (queue, lastReleaseAt) doesn't persist across requests, so the
+ * token bucket buys nothing AND `setTimeout` can fire after the function
+ * has returned, producing flaky behaviour. Detect via `VERCEL` env (set
+ * automatically by Vercel) and bypass the queue entirely.
+ *
+ * The client-side scheduler already paces requests at one per ~3.7s, and
+ * the server-side response cache absorbs duplicate hits, so dropping the
+ * extra layer in prod is fine.
+ */
+const SERVERLESS = !!process.env['VERCEL'];
+
 let lastReleaseAt = 0;
 let cooldownUntil = 0;
 const queue: Array<() => void> = [];
@@ -68,6 +81,7 @@ function pump(): void {
  * up indefinitely.
  */
 export function acquireUpstreamToken(): Promise<void> {
+  if (SERVERLESS) return Promise.resolve(); // see SERVERLESS comment above
   if (queue.length >= MAX_QUEUE) {
     return Promise.reject(
       new Error(`Upstream queue full (>${MAX_QUEUE}); refusing request`)
