@@ -14,9 +14,9 @@
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getCached, setCached, ttlForPath } from './_lib/cache';
-import { acquireUpstreamToken, noteUpstream429 } from './_lib/scheduler';
-import { getAccessToken, TdxTokenError } from './_lib/tdx-token';
+import { getCached, setCached, ttlForPath } from './_lib/cache.js';
+import { acquireUpstreamToken, noteUpstream429 } from './_lib/scheduler.js';
+import { getAccessToken, TdxTokenError } from './_lib/tdx-token.js';
 
 const TDX_BASE = 'https://tdx.transportdata.tw/api/basic/';
 const RESPONSE_HEADERS_TO_DROP = new Set([

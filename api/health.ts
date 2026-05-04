@@ -8,7 +8,7 @@
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getAccessToken } from './_lib/tdx-token';
+import { getAccessToken } from './_lib/tdx-token.js';
 
 interface HealthResponse {
   readonly ok: boolean;
